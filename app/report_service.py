@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-from weasyprint import HTML
+from weasyprint import HTML, CSS
 
 from .charts import programa_tres_semanas
 from .formatters import (
@@ -31,10 +31,11 @@ env = Environment(
 def build_context(data: dict[str, Any]) -> dict[str, Any]:
     chart_programa = programa_tres_semanas(data)
 
+    logo_file = STATIC_DIR / "logo_altius.png"
+
     return {
         "d": data,
-        "logo_path": (STATIC_DIR / "logo_altius.png").resolve().as_uri()
-            if (STATIC_DIR / "logo_altius.png").exists() else None,
+        "logo_path": logo_file.resolve().as_uri() if logo_file.exists() else None,
         "chart_programa": chart_programa,
         "f": {
             "date": fmt_date,
@@ -50,15 +51,31 @@ def build_context(data: dict[str, Any]) -> dict[str, Any]:
 
 def generate_pdf(id_informe: str, data: dict[str, Any]) -> Path:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
     template = env.get_template("informe_semanal.html")
     html = template.render(**build_context(data))
 
-    safe_id = "".join(c for c in id_informe if c.isalnum() or c in ("-", "_"))
+    safe_id = "".join(
+        c for c in str(id_informe)
+        if c.isalnum() or c in ("-", "_")
+    ) or "informe"
+
     output_path = OUTPUT_DIR / f"Informe_Semanal_OG_{safe_id}.pdf"
+
+    css_file = STATIC_DIR / "report.css"
+    stylesheets = []
+
+    if css_file.exists():
+        stylesheets.append(
+            CSS(filename=str(css_file))
+        )
 
     HTML(
         string=html,
         base_url=str(BASE_DIR),
-    ).write_pdf(str(output_path))
+    ).write_pdf(
+        str(output_path),
+        stylesheets=stylesheets,
+    )
 
     return output_path

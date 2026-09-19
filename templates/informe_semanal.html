@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Informe Semanal de Obra Gruesa</title>
+<link rel="stylesheet" href="../static/report.css">
+</head>
+<body>
+
+<section class="page cover">
+  <header class="report-header">
+    <div class="brand">
+      {% if logo_path %}<img src="{{ logo_path }}" alt="Altius">{% endif %}
+    </div>
+    <div class="header-title">
+      <h1>INFORME SEMANAL DE OBRA GRUESA</h1>
+      <p>Control ejecutivo de producción y gestión</p>
+    </div>
+  </header>
+
+  <div class="work-title">
+    <h2>{{ d.get("NOMBRE_OBRA", "OBRA") }}</h2>
+    <p>
+      Semana {{ f.date(d.get("FECHA_INICIO_SEMANA")) }}
+      al {{ f.date(d.get("FECHA_TERMINO_SEMANA")) }}
+    </p>
+  </div>
+
+  <div class="meta-grid">
+    <div><span>Inicio obra</span><strong>{{ f.date(d.get("FECHA_INICIO_OBRA")) }}</strong></div>
+    <div><span>Término contractual</span><strong>{{ f.date(d.get("FECHA_TERMINO_OBRA")) }}</strong></div>
+    <div><span>Plazo obra</span><strong>{{ f.num(d.get("PLAZO_OBRA"), 0) }} días</strong></div>
+    <div><span>Plazo transcurrido</span><strong>{{ f.pct(d.get("%_PLAZO_TRANSCURRIDO")) }}</strong></div>
+    <div><span>Responsable</span><strong>{{ d.get("RESPONSABLE_INFORME", "—") }}</strong></div>
+    <div><span>Fecha de corte</span><strong>{{ f.date(d.get("FECHA_CORTE")) }}</strong></div>
+  </div>
+
+  <div class="narrative">
+    <h3>Bitácora semanal</h3>
+    <p>{{ d.get("BITACORA_SEMANAL", "Sin bitácora registrada.") }}</p>
+  </div>
+
+  <div class="three-columns">
+    <div class="note-card">
+      <h4>Hitos de la semana</h4>
+      <p>{{ d.get("HITOS_SEMANA", "—") }}</p>
+    </div>
+    <div class="note-card">
+      <h4>Restricciones / incidencias</h4>
+      <p>{{ d.get("RESTRICCIONES_SEMANA", "—") }}</p>
+    </div>
+    <div class="note-card">
+      <h4>Próxima semana</h4>
+      <p>{{ d.get("ACCIONES_PROXIMA_SEMANA", "—") }}</p>
+    </div>
+  </div>
+
+  <h3 class="section-title">Resumen ejecutivo</h3>
+  <div class="kpi-grid kpi-4">
+    <div class="kpi"><span>Cumplimiento semanal</span><strong>{{ f.pct(d.get("CUMPLIMIENTO_SEMANA")) }}</strong></div>
+    <div class="kpi"><span>Brecha semanal</span><strong>{{ f.m3(d.get("BRECHA_M3_SEMANA")) }}</strong></div>
+    <div class="kpi"><span>Guías recibidas</span><strong>{{ d.get("GUIAS_SEMANA", "—") }}</strong></div>
+    <div class="kpi"><span>UF por facturar</span><strong>{{ f.uf(d.get("UF_POR_FACTURAR_OC")) }}</strong></div>
+    <div class="kpi"><span>Paños hormigonados</span><strong>{{ d.get("PANOS_HORMIGONADOS_SEMANA", "—") }}</strong></div>
+    <div class="kpi"><span>Descimbres semana</span><strong>{{ d.get("DESCIMBRES_SEMANA", "—") }}</strong></div>
+    <div class="kpi"><span>Fotos semana</span><strong>{{ d.get("FOTOS_SEMANA", "—") }}</strong></div>
+    <div class="kpi"><span>Estado curva</span><strong>{{ d.get("ESTADO_CURVA", "—") }}</strong></div>
+  </div>
+</section>
+
+<section class="page">
+  <h2 class="module-title">01 · Programa semanal y curva de hormigón</h2>
+
+  <div class="kpi-grid kpi-4">
+    <div class="kpi"><span>Programado semana</span><strong>{{ f.m3(d.get("M3_PROGRAMADOS_SEMANA")) }}</strong></div>
+    <div class="kpi"><span>Real semana</span><strong>{{ f.m3(d.get("M3_REALES_SEMANA")) }}</strong></div>
+    <div class="kpi"><span>Geométrico semana</span><strong>{{ f.m3(d.get("M3_GEOMETRICOS_SEMANA")) }}</strong></div>
+    <div class="kpi"><span>% pérdida</span><strong>{{ f.pct(d.get("%_PERDIDA_SEM")) }}</strong></div>
+  </div>
+
+  <table class="data-table">
+    <thead>
+      <tr><th>Indicador</th><th>Actual</th><th>Anterior</th><th>Hace 2 semanas</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>M³ programados</td><td>{{ f.num(d.get("M3_PROGRAMADOS_SEMANA")) }}</td><td>{{ f.num(d.get("M3_PROGRAMADOS_SEM_ANT")) }}</td><td>{{ f.num(d.get("M3_PROGRAMADOS_2SEM")) }}</td></tr>
+      <tr><td>M³ reales</td><td>{{ f.num(d.get("M3_REALES_SEMANA")) }}</td><td>{{ f.num(d.get("M3_REALES_SEM_ANT")) }}</td><td>{{ f.num(d.get("M3_REALES_2SEM")) }}</td></tr>
+      <tr><td>M³ geométricos</td><td>{{ f.num(d.get("M3_GEOMETRICOS_SEMANA")) }}</td><td>{{ f.num(d.get("M3_GEOMETRICOS_SEM_ANT")) }}</td><td>{{ f.num(d.get("M3_GEOMETRICOS_2SEM")) }}</td></tr>
+      <tr><td>Cumplimiento</td><td>{{ f.pct(d.get("CUMPLIMIENTO_SEMANA")) }}</td><td>{{ f.pct(d.get("CUMPLIMIENTO_SEM_ANT")) }}</td><td>{{ f.pct(d.get("CUMPLIMIENTO_2SEM")) }}</td></tr>
+      <tr><td>Pérdida</td><td>{{ f.pct(d.get("%_PERDIDA_SEM")) }}</td><td>{{ f.pct(d.get("%_PERDIDA_SEM_ANT")) }}</td><td>{{ f.pct(d.get("%_PERDIDA_2SEM")) }}</td></tr>
+    </tbody>
+  </table>
+
+  {% if chart_programa %}
+  <div class="chart-box"><img src="{{ chart_programa }}" alt="Programa versus real"></div>
+  {% endif %}
+
+  <div class="kpi-grid kpi-4">
+    <div class="kpi"><span>Programa acumulado</span><strong>{{ f.m3(d.get("M3_PROGRAMA_ACUM")) }}</strong></div>
+    <div class="kpi"><span>Real acumulado</span><strong>{{ f.m3(d.get("M3_REAL_ACUM")) }}</strong></div>
+    <div class="kpi"><span>Brecha acumulada</span><strong>{{ f.m3(d.get("BRECHA_M3_ACUM")) }}</strong></div>
+    <div class="kpi"><span>Próximas 2 semanas</span><strong>{{ f.m3(d.get("M3_PROX_2_SEM")) }}</strong></div>
+  </div>
+</section>
+
+<section class="page">
+  <h2 class="module-title">02 · Guías, facturación y orden de compra</h2>
+
+  <h3 class="sub-title">Guías recibidas y validadas</h3>
+  <div class="kpi-grid kpi-4">
+    <div class="kpi"><span>Guías semana</span><strong>{{ d.get("GUIAS_SEMANA", "—") }}</strong></div>
+    <div class="kpi"><span>M³ recibidos</span><strong>{{ f.m3(d.get("M3_GUIAS_SEMANA")) }}</strong></div>
+    <div class="kpi"><span>% validadas</span><strong>{{ f.pct(d.get("PORC_GUIAS_VALIDADAS")) }}</strong></div>
+    <div class="kpi"><span>% con TED</span><strong>{{ f.pct(d.get("PORC_GUIAS_CON_TED")) }}</strong></div>
+  </div>
+
+  <h3 class="sub-title">Facturación de hormigón</h3>
+  <div class="kpi-grid kpi-4">
+    <div class="kpi"><span>Facturas semana</span><strong>{{ d.get("FACTURAS_SEMANA", "—") }}</strong></div>
+    <div class="kpi"><span>Neto facturado</span><strong>{{ f.clp(d.get("NETO_FACTURADO_SEMANA")) }}</strong></div>
+    <div class="kpi"><span>Guías pendientes</span><strong>{{ d.get("GUIAS_PENDIENTES_FACTURA_SEMANA", "—") }}</strong></div>
+    <div class="kpi"><span>M³ pendientes</span><strong>{{ f.m3(d.get("M3_PENDIENTES_FACTURA_SEMANA")) }}</strong></div>
+  </div>
+
+  <h3 class="sub-title">Orden de compra</h3>
+  <div class="kpi-grid kpi-4">
+    <div class="kpi"><span>M³ contratados</span><strong>{{ f.m3(d.get("M3_OC_HORMIGON")) }}</strong></div>
+    <div class="kpi"><span>M³ consumidos</span><strong>{{ f.m3(d.get("M3_CONSUMIDOS_OC")) }}</strong></div>
+    <div class="kpi"><span>Saldo OC</span><strong>{{ f.m3(d.get("M3_SALDO_OC")) }}</strong></div>
+    <div class="kpi"><span>Consumo OC</span><strong>{{ f.pct(d.get("PORC_CONSUMO_OC_HORMIGON")) }}</strong></div>
+  </div>
+</section>
+
+<section class="page">
+  <h2 class="module-title">03 · Control de alzaprimado y descimbre</h2>
+
+  <div class="kpi-grid kpi-4">
+    <div class="kpi"><span>Total paños</span><strong>{{ d.get("TOTAL_PANOS", "—") }}</strong></div>
+    <div class="kpi"><span>Hormigonados</span><strong>{{ d.get("PANOS_HORMIGONADOS", "—") }}</strong></div>
+    <div class="kpi"><span>Hormigonados semana</span><strong>{{ d.get("PANOS_HORMIGONADOS_SEMANA", "—") }}</strong></div>
+    <div class="kpi"><span>Descimbres semana</span><strong>{{ d.get("DESCIMBRES_SEMANA", "—") }}</strong></div>
+  </div>
+
+  <table class="data-table">
+    <thead><tr><th>Estado</th><th>Paños</th><th>% del total</th></tr></thead>
+    <tbody>
+      <tr><td>Faena actual</td><td>{{ d.get("CNT_FAENA_ACTUAL", "—") }}</td><td>{{ f.pct(d.get("PORC_FAENA_ACTUAL")) }}</td></tr>
+      <tr><td>100% alzaprimas</td><td>{{ d.get("CNT_100_ALZAPRIMAS", "—") }}</td><td>{{ f.pct(d.get("PORC_100_ALZAPRIMAS")) }}</td></tr>
+      <tr><td>50% alzaprimas</td><td>{{ d.get("CNT_50_ALZAPRIMAS", "—") }}</td><td>{{ f.pct(d.get("PORC_50_ALZAPRIMAS")) }}</td></tr>
+      <tr><td>Disponible descimbre</td><td>{{ d.get("CNT_DISP_DESCIMBRE", "—") }}</td><td>{{ f.pct(d.get("PORC_DISP_DESCIMBRE")) }}</td></tr>
+      <tr><td>Descimbrada</td><td>{{ d.get("CNT_DESCIMBRADA", "—") }}</td><td>{{ f.pct(d.get("PORC_DESCIMBRADA")) }}</td></tr>
+      <tr><td>Sin hormigonar</td><td>{{ d.get("CNT_SIN_HORMIGONAR", "—") }}</td><td>{{ f.pct(d.get("PORC_SIN_HORMIGONAR")) }}</td></tr>
+    </tbody>
+  </table>
+
+  <div class="highlight">
+    Última losa hormigonada:
+    <strong>Piso {{ d.get("PISO_ULTIMA_LOSA", "—") }}</strong>
+    · {{ f.date(d.get("ULTIMA_LOSA_HORMIGONADA")) }}
+  </div>
+
+  <div class="placeholder">
+    Espacio reservado para insertar el SVG de estado del edificio en la siguiente versión.
+  </div>
+</section>
+
+<section class="page">
+  <h2 class="module-title">04 · Registro fotográfico</h2>
+
+  <div class="kpi-grid kpi-3">
+    <div class="kpi"><span>Fotos semana</span><strong>{{ d.get("FOTOS_SEMANA", "—") }}</strong></div>
+    <div class="kpi"><span>Pisos registrados</span><strong>{{ d.get("PISOS_CON_REGISTRO", "—") }}</strong></div>
+    <div class="kpi"><span>Último registro</span><strong>{{ f.date(d.get("ULTIMA_FOTO_FECHA")) }}</strong></div>
+  </div>
+
+  <div class="placeholder large">
+    La V0.1 deja preparada esta página. En la siguiente fase el backend leerá
+    REGISTRO_AVANCE_SEMANAL e insertará las fotografías marcadas para el informe.
+  </div>
+
+  <div class="future">
+    <strong>Módulos previstos:</strong>
+    resultados de ensayos de hormigón · pedidos y facturas de fierro · avance económico semanal.
+  </div>
+</section>
+
+</body>
+</html>

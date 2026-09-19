@@ -1,0 +1,237 @@
+@page {
+  size: A4;
+  margin: 13mm 13mm 14mm 13mm;
+  @bottom-right {
+    content: "Página " counter(page) " de " counter(pages);
+    font: 8pt Arial, sans-serif;
+    color: #748195;
+  }
+}
+
+:root {
+  --navy: #1f3b5b;
+  --navy-2: #274d76;
+  --ink: #172033;
+  --muted: #6b7280;
+  --line: #d9e2ec;
+  --bg: #eef2f7;
+  --green: #27ae60;
+  --blue: #2f80ed;
+  --orange: #f2994a;
+  --red: #eb5757;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: Arial, Helvetica, sans-serif;
+  color: var(--ink);
+  font-size: 10.2pt;
+  background: white;
+}
+
+.page {
+  page-break-after: always;
+}
+
+.page:last-child { page-break-after: auto; }
+
+.report-header {
+  display: grid;
+  grid-template-columns: 135px 1fr;
+  gap: 18px;
+  align-items: center;
+  border-bottom: 3px solid var(--navy);
+  padding-bottom: 10px;
+}
+
+.brand img {
+  max-width: 125px;
+  max-height: 54px;
+}
+
+.header-title h1 {
+  color: var(--navy);
+  font-size: 19pt;
+  margin: 0 0 4px 0;
+  letter-spacing: .2px;
+}
+
+.header-title p {
+  color: var(--muted);
+  margin: 0;
+  font-size: 9.5pt;
+}
+
+.work-title {
+  background: var(--navy);
+  color: white;
+  padding: 13px 16px;
+  border-radius: 10px;
+  margin: 14px 0 12px;
+}
+
+.work-title h2 {
+  margin: 0 0 3px;
+  font-size: 16pt;
+}
+
+.work-title p { margin: 0; opacity: .9; }
+
+.meta-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.meta-grid > div,
+.kpi,
+.note-card {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 8px;
+  padding: 9px 10px;
+}
+
+.meta-grid span,
+.kpi span {
+  display: block;
+  color: var(--muted);
+  font-size: 8.2pt;
+  text-transform: uppercase;
+  font-weight: bold;
+  margin-bottom: 5px;
+}
+
+.meta-grid strong {
+  color: var(--navy);
+  font-size: 10pt;
+}
+
+.narrative {
+  border-left: 5px solid var(--navy);
+  background: #f7f9fc;
+  padding: 11px 13px;
+  margin: 12px 0;
+}
+
+.narrative h3 {
+  margin: 0 0 6px;
+  color: var(--navy);
+  font-size: 11pt;
+}
+
+.narrative p,
+.note-card p {
+  white-space: pre-wrap;
+  margin: 0;
+  line-height: 1.42;
+}
+
+.three-columns {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.note-card h4 {
+  color: var(--navy);
+  margin: 0 0 5px;
+  font-size: 9.5pt;
+}
+
+.section-title,
+.module-title {
+  color: var(--navy);
+  border-bottom: 2px solid var(--navy);
+  padding-bottom: 6px;
+}
+
+.section-title { font-size: 12.5pt; margin: 15px 0 9px; }
+.module-title { font-size: 16pt; margin: 0 0 14px; }
+.sub-title { color: var(--navy); font-size: 11.5pt; margin: 18px 0 8px; }
+
+.kpi-grid {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.kpi-4 { grid-template-columns: repeat(4, 1fr); }
+.kpi-3 { grid-template-columns: repeat(3, 1fr); }
+
+.kpi {
+  border-top: 5px solid var(--blue);
+  text-align: center;
+  min-height: 70px;
+}
+
+.kpi strong {
+  display: block;
+  color: var(--ink);
+  font-size: 16pt;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 10px 0 14px;
+  font-size: 9pt;
+}
+
+.data-table th {
+  background: var(--navy);
+  color: white;
+  text-align: left;
+  padding: 7px;
+}
+
+.data-table td {
+  padding: 6px 7px;
+  border-bottom: 1px solid var(--line);
+}
+
+.data-table tbody tr:nth-child(even) {
+  background: #f7f9fc;
+}
+
+.chart-box {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  margin: 10px 0 15px;
+  text-align: center;
+}
+
+.chart-box img { max-width: 100%; max-height: 260px; }
+
+.highlight {
+  background: #f1f7f4;
+  border-left: 5px solid var(--green);
+  padding: 12px;
+  margin: 14px 0;
+  color: var(--navy);
+}
+
+.placeholder {
+  border: 2px dashed #b7c3d0;
+  background: #f8fafc;
+  color: #718096;
+  min-height: 170px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px;
+  border-radius: 8px;
+}
+
+.placeholder.large { min-height: 420px; }
+
+.future {
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 8.8pt;
+}

@@ -3,7 +3,6 @@
 <head>
 <meta charset="utf-8">
 <title>Informe Semanal de Obra Gruesa</title>
-<link rel="stylesheet" href="../static/report.css">
 </head>
 <body>
 
@@ -56,6 +55,7 @@
   </div>
 
   <h3 class="section-title">Resumen ejecutivo</h3>
+
   <div class="kpi-grid kpi-4">
     <div class="kpi"><span>Cumplimiento semanal</span><strong>{{ f.pct(d.get("CUMPLIMIENTO_SEMANA")) }}</strong></div>
     <div class="kpi"><span>Brecha semanal</span><strong>{{ f.m3(d.get("BRECHA_M3_SEMANA")) }}</strong></div>
@@ -174,7 +174,7 @@
   </div>
 
   <div class="placeholder large">
-    La V0.1 deja preparada esta página. En la siguiente fase el backend leerá
+    La V0.2 deja preparada esta página. En la siguiente fase el backend leerá
     REGISTRO_AVANCE_SEMANAL e insertará las fotografías marcadas para el informe.
   </div>
 

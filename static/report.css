@@ -9,16 +9,30 @@
 }
 
 :root {
-  --navy: #1f3b5b;
-  --navy-2: #274d76;
+  /* Azul dominante medido desde el logo ALTIUS */
+  --brand-blue: #031F73;
+
+  /* Azul eléctrico para acentos, barras y KPI */
+  --brand-electric: #1769FF;
+
+  /* Azul intermedio para estados y elementos secundarios */
+  --brand-mid: #0A3AB8;
+
+  /* Fondo azul muy suave */
+  --brand-soft: #EEF4FF;
+
+  --navy: var(--brand-blue);
+  --navy-2: var(--brand-mid);
+  --blue: var(--brand-electric);
+
   --ink: #172033;
-  --muted: #6b7280;
-  --line: #d9e2ec;
-  --bg: #eef2f7;
-  --green: #27ae60;
-  --blue: #2f80ed;
-  --orange: #f2994a;
-  --red: #eb5757;
+  --muted: #687386;
+  --line: #D8E0EA;
+  --bg: #F2F5F9;
+
+  --green: #27AE60;
+  --orange: #F2994A;
+  --red: #EB5757;
 }
 
 * { box-sizing: border-box; }
@@ -42,7 +56,7 @@ body {
   grid-template-columns: 112px 1fr;
   gap: 12px;
   align-items: center;
-  border-bottom: 3px solid var(--navy);
+  border-bottom: 3px solid var(--brand-electric);
   padding-bottom: 10px;
 }
 
@@ -52,7 +66,7 @@ body {
 }
 
 .header-title h1 {
-  color: var(--navy);
+  color: var(--brand-blue);
   font-size: 17pt;
   line-height: 1.05;
   margin: 0 0 4px 0;
@@ -67,11 +81,12 @@ body {
 }
 
 .work-title {
-  background: var(--navy);
+  background: var(--brand-blue);
   color: white;
   padding: 13px 16px;
   border-radius: 10px;
   margin: 14px 0 12px;
+  border-left: 6px solid var(--brand-electric);
 }
 
 .work-title h2 {
@@ -113,8 +128,8 @@ body {
 }
 
 .narrative {
-  border-left: 5px solid var(--navy);
-  background: #f7f9fc;
+  border-left: 5px solid var(--brand-electric);
+  background: var(--brand-soft);
   padding: 11px 13px;
   margin: 12px 0;
 }
@@ -146,14 +161,18 @@ body {
 
 .section-title,
 .module-title {
-  color: var(--navy);
-  border-bottom: 2px solid var(--navy);
+  color: var(--brand-blue);
+  border-bottom: 2px solid var(--brand-electric);
   padding-bottom: 6px;
 }
 
 .section-title { font-size: 12.5pt; margin: 15px 0 9px; }
 .module-title { font-size: 16pt; margin: 0 0 14px; }
-.sub-title { color: var(--navy); font-size: 11.5pt; margin: 18px 0 8px; }
+.sub-title {
+  color: var(--brand-blue);
+  font-size: 11.5pt;
+  margin: 18px 0 8px;
+}
 
 .kpi-grid {
   display: grid;
@@ -165,9 +184,10 @@ body {
 .kpi-3 { grid-template-columns: repeat(3, 1fr); }
 
 .kpi {
-  border-top: 5px solid var(--blue);
+  border-top: 5px solid var(--brand-electric);
   text-align: center;
   min-height: 70px;
+  background: #FFFFFF;
 }
 
 .kpi strong {
@@ -189,10 +209,11 @@ body {
 }
 
 .data-table th {
-  background: var(--navy);
+  background: var(--brand-blue);
   color: white;
   text-align: left;
   padding: 7px;
+  border-bottom: 2px solid var(--brand-electric);
 }
 
 .data-table td {
@@ -215,11 +236,11 @@ body {
 .chart-box img { max-width: 100%; max-height: 260px; }
 
 .highlight {
-  background: #f1f7f4;
+  background: #F1F7F4;
   border-left: 5px solid var(--green);
   padding: 12px;
   margin: 14px 0;
-  color: var(--navy);
+  color: var(--brand-blue);
 }
 
 .placeholder {
@@ -256,4 +277,34 @@ body {
 
 .data-table {
   break-inside: avoid;
+}
+
+
+/* V0.4 — identidad ALTIUS */
+.meta-grid strong,
+.note-card h4,
+.narrative h3 {
+  color: var(--brand-blue);
+}
+
+.meta-grid > div,
+.kpi,
+.note-card,
+.chart-box {
+  border-color: var(--line);
+}
+
+.data-table tbody tr:nth-child(even) {
+  background: #F6F8FC;
+}
+
+.section-title,
+.module-title,
+.sub-title,
+.header-title h1 {
+  font-weight: 700;
+}
+
+.future strong {
+  color: var(--brand-blue);
 }

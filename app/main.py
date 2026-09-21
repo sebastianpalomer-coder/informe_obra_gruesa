@@ -10,7 +10,7 @@ from .report_service import generate_pdf
 
 app = FastAPI(
     title="Informe Semanal Obra Gruesa",
-    version="0.3.0",
+    version="0.4.0",
 )
 
 
@@ -102,7 +102,7 @@ def ping():
     return {
         "ok": True,
         "service": "informe-semanal-obra-gruesa",
-        "version": "0.3.0",
+        "version": "0.4.0",
     }
 
 

@@ -1,3 +1,4 @@
+\
 <!doctype html>
 <html lang="es">
 <head>
@@ -92,7 +93,9 @@
   </table>
 
   {% if chart_programa %}
-  <div class="chart-box"><img src="{{ chart_programa }}" alt="Programa versus real"></div>
+  <div class="chart-box">
+    <img src="{{ chart_programa }}" alt="Programa versus real">
+  </div>
   {% endif %}
 
   <div class="kpi-grid kpi-4">
@@ -159,9 +162,15 @@
     · {{ f.date(d.get("ULTIMA_LOSA_HORMIGONADA")) }}
   </div>
 
-  <div class="placeholder">
-    Espacio reservado para insertar el SVG de estado del edificio en la siguiente versión.
-  </div>
+  {% if svg_alzaprimado %}
+    <div class="alz-svg">
+      <img src="{{ svg_alzaprimado }}" alt="Estado de alzaprimado">
+    </div>
+  {% else %}
+    <div class="placeholder">
+      No fue posible incorporar la visualización de alzaprimado.
+    </div>
+  {% endif %}
 </section>
 
 <section class="page">
@@ -173,15 +182,37 @@
     <div class="kpi"><span>Último registro</span><strong>{{ f.date(d.get("ULTIMA_FOTO_FECHA")) }}</strong></div>
   </div>
 
-  <div class="placeholder large">
-    La V0.2 deja preparada esta página. En la siguiente fase el backend leerá
-    REGISTRO_AVANCE_SEMANAL e insertará las fotografías marcadas para el informe.
-  </div>
+  {% if fotos %}
+    <div class="photo-grid">
+      {% for foto in fotos %}
+        <div class="photo-card">
+          <img src="{{ foto.imagen }}" alt="Registro fotográfico">
+          <div class="photo-meta">
+            <div>
+              <strong>{{ f.date(foto.fecha) }}</strong>
+              {% if foto.piso not in (None, "", "—") %}
+                · Piso {{ foto.piso }}
+              {% endif %}
+            </div>
+            <p>{{ foto.comentario or "Sin comentario." }}</p>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="placeholder large">
+      No se seleccionaron fotografías para incluir en este informe.
+    </div>
+  {% endif %}
 
-  <div class="future">
-    <strong>Módulos previstos:</strong>
-    resultados de ensayos de hormigón · pedidos y facturas de fierro · avance económico semanal.
-  </div>
+  {% if warnings %}
+    <div class="technical-note">
+      <strong>Advertencias de generación:</strong>
+      {% for warning in warnings %}
+        <div>• {{ warning }}</div>
+      {% endfor %}
+    </div>
+  {% endif %}
 </section>
 
 </body>

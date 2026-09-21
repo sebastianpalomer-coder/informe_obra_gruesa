@@ -308,3 +308,73 @@ body {
 .future strong {
   color: var(--brand-blue);
 }
+
+
+/* ==========================================================
+   V1.0 OPERATIVA
+   ========================================================== */
+
+.alz-svg {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #FFFFFF;
+  padding: 8px;
+  margin-top: 12px;
+  text-align: center;
+  break-inside: avoid;
+}
+
+.alz-svg img {
+  width: 100%;
+  max-height: 390px;
+  object-fit: contain;
+}
+
+.photo-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.photo-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #FFFFFF;
+  break-inside: avoid;
+}
+
+.photo-card img {
+  width: 100%;
+  height: 165px;
+  object-fit: cover;
+  display: block;
+}
+
+.photo-meta {
+  padding: 8px 10px 9px;
+  min-height: 58px;
+}
+
+.photo-meta > div {
+  color: var(--brand-blue);
+  font-size: 8.5pt;
+}
+
+.photo-meta p {
+  color: var(--ink);
+  font-size: 8.5pt;
+  line-height: 1.28;
+  margin: 5px 0 0;
+}
+
+.technical-note {
+  margin-top: 12px;
+  padding: 8px 10px;
+  border-left: 4px solid var(--orange);
+  background: #FFF8EF;
+  color: #6B4A21;
+  font-size: 7.8pt;
+  line-height: 1.35;
+}

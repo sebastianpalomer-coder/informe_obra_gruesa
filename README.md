@@ -1,86 +1,172 @@
-# Informe Semanal de Obra Gruesa · v0.1
+\
+# Informe Semanal de Obra Gruesa - V1.0 Operativa
 
-Servicio FastAPI para generar el informe ejecutivo semanal de obra gruesa de ALTIUS.
+Esta versión conecta AppSheet -> Cloud Run -> AppSheet/Drive.
 
-## Arquitectura inicial
+## Flujo
 
-AppSheet llama `POST /informe-semanal` y envía:
-
-```json
-{
-  "id_informe": "ABC123",
-  "datos": {
-    "NOMBRE_OBRA": "...",
-    "BITACORA_SEMANAL": "...",
-    "M3_PROGRAMADOS_SEMANA": 43.2
-  }
-}
-```
-
-La idea de esta V0.1 es **usar las columnas virtuales ya calculadas en AppSheet como snapshot del informe**.
-Esto evita intentar leerlas desde Google Sheets, porque las virtual columns no existen físicamente en la hoja.
-
-En siguientes versiones el servicio además leerá directamente:
-- `DETALLE_PROGRAMA`
-- `CURVA_HORMIGON`
-- `REGISTRO_AVANCE_SEMANAL`
-- `VISTA_ALZAPRIMADO`
-- nuevas tablas de ensayos, fierro y avance económico
-
-para construir gráficos y anexos más completos.
+1. El usuario completa una fila de `INFORME`.
+2. Acción AppSheet: `Generar informe`.
+3. La acción deja `REGENERAR_INFORME = TRUE`.
+4. Bot de AppSheet detecta el cambio y llama:
+   `POST /informe-semanal`
+5. El webhook envía solamente:
+   `{"id_informe":"<<[ID_INFORME]>>"}`
+6. Cloud Run consulta la tabla `INFORME` por API.
+   AppSheet devuelve también las columnas virtuales.
+7. El backend consulta:
+   - `OBRA`
+   - `VISTA_ALZAPRIMADO`
+   - `REGISTRO_AVANCE_SEMANAL`
+8. Descarga desde Google Drive:
+   - el SVG actual de alzaprimado
+   - fotografías con `INCLUIR_INFORME = TRUE`
+9. Genera el PDF.
+10. Guarda/reemplaza el PDF en:
+    `INFORMES_SEMANALES/Informe_Semanal_OG_<ID_INFORME>.pdf`
+11. Actualiza `INFORME`:
+    - `ARCHIVO_INFORME`
+    - `FECHA_EMISION`
+    - `ESTADO_INFORME = EMITIDO`
+    - `REGENERAR_INFORME = FALSE`
 
 ## Endpoints
 
-### `GET /ping`
+### GET /ping
+Debe devolver `version: 1.0.0`.
 
-Respuesta de salud del servicio.
+### POST /informe-semanal
+Operativo: genera, sube a Drive y actualiza AppSheet.
 
-### `POST /informe-semanal`
-
-Genera un PDF y lo devuelve directamente.
-
-## Ejecutar localmente
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload
+Body:
+```json
+{
+  "id_informe": "ID_REAL"
+}
 ```
 
-En Windows PowerShell:
+### POST /informe-semanal/preview
+Genera el PDF con datos reales y lo devuelve al navegador,
+pero no lo sube ni cambia `ARCHIVO_INFORME`.
 
-```powershell
-py -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-uvicorn app.main:app --reload
+## Variables de entorno Cloud Run
+
+Obligatorias:
+
+- `APPSHEET_APP_ID`
+- `APPSHEET_ACCESS_KEY`
+- `APP_ROOT_FOLDER_ID`
+
+Recomendado:
+
+- `REPORT_WEBHOOK_TOKEN`
+
+Opcionales:
+
+- `APPSHEET_DOMAIN=www.appsheet.com`
+- `APPSHEET_LOCALE=en-US`
+- `APPSHEET_TIMEZONE=Pacific SA Standard Time`
+- `REPORT_FOLDER_NAME=INFORMES_SEMANALES`
+- `MAX_REPORT_PHOTOS=6`
+
+## Google Drive
+
+El servicio usa Application Default Credentials del Service Account de Cloud Run.
+
+1. Habilitar `Google Drive API` en el proyecto.
+2. Identificar el Service Account utilizado por el servicio Cloud Run.
+3. Compartir con ese correo, como **Editor**, la carpeta raíz donde está
+   el Google Sheet de la aplicación y las carpetas de imágenes.
+4. Copiar el ID de esa carpeta a `APP_ROOT_FOLDER_ID`.
+
+El SVG de alzaprimado actualmente se genera en la misma carpeta
+que el Google Sheet, por lo que el backend puede encontrarlo por `SVG_URI`.
+
+Los archivos de `REGISTRO_AVANCE_SEMANAL[IMAGEN]` se resuelven
+como rutas relativas desde la misma carpeta raíz.
+
+## AppSheet
+
+### Acción `Generar informe`
+
+Tabla: `INFORME`
+
+Tipo:
+`Data: set the values of some columns in this row`
+
+Valor:
+
+`REGENERAR_INFORME = TRUE`
+
+Condición sugerida:
+
+```appsheet
+AND(
+  ISNOTBLANK([ID_INFORME]),
+  ISNOTBLANK([BITACORA_SEMANAL]),
+  NOT([REGENERAR_INFORME])
+)
 ```
 
-Luego:
+### Bot
 
-```bash
-curl -X POST http://127.0.0.1:8000/informe-semanal ^
-  -H "Content-Type: application/json" ^
-  --data-binary @sample_payload.json ^
-  --output informe_demo.pdf
+Evento:
+- Tabla: `INFORME`
+- Updates
+- Condition:
+
+```appsheet
+[REGENERAR_INFORME] = TRUE
 ```
 
-## Docker
+Task:
+`Call a webhook`
 
-```bash
-docker build -t informe-og .
-docker run --rm -p 8080:8080 informe-og
+URL:
+`https://TU-SERVICIO.run.app/informe-semanal`
+
+HTTP Verb:
+`POST`
+
+Content Type:
+`JSON`
+
+Body:
+usar `appsheet/BODY_WEBHOOK_GENERAR_INFORME.json`
+
+Header:
+
+`X-Report-Token: <mismo valor de REPORT_WEBHOOK_TOKEN>`
+
+## Prueba antes de activar el Bot
+
+Abrir `/docs`.
+
+Probar primero:
+`POST /informe-semanal/preview`
+
+Body:
+```json
+{
+  "id_informe": "ID_REAL_DE_INFORME"
+}
 ```
 
-## Cloud Run
+Si se configuró `REPORT_WEBHOOK_TOKEN`, completar también
+el header `X-Report-Token`.
 
-El `Dockerfile` ya está preparado para Cloud Run.
+Confirmar:
+- datos reales
+- SVG
+- fotografías elegidas
 
-En la siguiente fase se incorporará:
-1. subida automática del PDF a Drive;
-2. escritura de `ARCHIVO_INFORME`;
-3. SVG de alzaprimado;
-4. fotografías seleccionadas desde `REGISTRO_AVANCE_SEMANAL`;
-5. gráficos históricos;
-6. secciones futuras de ensayos, fierro y avance económico.
+Después probar:
+`POST /informe-semanal`
+
+y verificar que `ARCHIVO_INFORME` quede lleno en AppSheet.
+
+## Nota sobre AppSheet API
+
+La arquitectura usa `Find` para leer la fila de `INFORME`.
+Esto permite que el backend reciba también las columnas virtuales
+calculadas por AppSheet, evitando replicar todos los cálculos en Python.

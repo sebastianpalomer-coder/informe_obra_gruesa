@@ -39,23 +39,25 @@ body {
 
 .report-header {
   display: grid;
-  grid-template-columns: 135px 1fr;
-  gap: 18px;
+  grid-template-columns: 112px 1fr;
+  gap: 12px;
   align-items: center;
   border-bottom: 3px solid var(--navy);
   padding-bottom: 10px;
 }
 
 .brand img {
-  max-width: 125px;
-  max-height: 54px;
+  max-width: 105px;
+  max-height: 48px;
 }
 
 .header-title h1 {
   color: var(--navy);
-  font-size: 19pt;
+  font-size: 17pt;
+  line-height: 1.05;
   margin: 0 0 4px 0;
-  letter-spacing: .2px;
+  letter-spacing: 0;
+  white-space: nowrap;
 }
 
 .header-title p {
@@ -171,7 +173,12 @@ body {
 .kpi strong {
   display: block;
   color: var(--ink);
-  font-size: 16pt;
+  font-size: 15pt;
+  line-height: 1.08;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+  font-variant-numeric: tabular-nums;
 }
 
 .data-table {
@@ -234,4 +241,19 @@ body {
   margin-top: 14px;
   color: var(--muted);
   font-size: 8.8pt;
+}
+
+
+/* V0.3 — ajustes de valores largos */
+.kpi {
+  padding-left: 7px;
+  padding-right: 7px;
+}
+
+.kpi-grid {
+  break-inside: avoid;
+}
+
+.data-table {
+  break-inside: avoid;
 }

@@ -103,7 +103,7 @@ def _load_media(
         svg_path = str(vista.get("SVG_URI", "")).strip()
         if svg_path:
             try:
-                svg_data_uri = drive.data_uri(svg_path)
+                svg_data_uri = drive.data_uri_svg(svg_path)
             except Exception as exc:
                 warnings.append(f"SVG no incorporado: {exc}")
 
@@ -112,7 +112,7 @@ def _load_media(
     for row in photos:
         image_path = str(row.get("IMAGEN", "")).strip()
         try:
-            image_uri = drive.data_uri(image_path)
+            image_uri = drive.data_uri_photo(image_path)
         except Exception as exc:
             warnings.append(
                 f"Foto {row.get('ID_REGISTRO_FOTOGRAFICO', '')} "

@@ -1,4 +1,3 @@
-\
 from __future__ import annotations
 
 import os
@@ -18,21 +17,30 @@ class AppSheetClient:
         self.access_key = os.getenv("APPSHEET_ACCESS_KEY", "").strip()
         self.domain = os.getenv("APPSHEET_DOMAIN", "www.appsheet.com").strip()
         self.locale = os.getenv("APPSHEET_LOCALE", "en-US").strip()
-        self.timezone = os.getenv("APPSHEET_TIMEZONE", "Pacific SA Standard Time").strip()
+        self.timezone = os.getenv(
+            "APPSHEET_TIMEZONE",
+            "Pacific SA Standard Time",
+        ).strip()
 
         if not self.app_id:
             raise AppSheetError("Falta APPSHEET_APP_ID.")
+
         if not self.access_key:
             raise AppSheetError("Falta APPSHEET_ACCESS_KEY.")
 
     def _url(self, table: str) -> str:
         table_encoded = quote(table, safe="")
+
         return (
             f"https://{self.domain}/api/v2/apps/{self.app_id}"
             f"/tables/{table_encoded}/Action"
         )
 
-    def _post(self, table: str, payload: dict[str, Any]) -> dict[str, Any]:
+    def _post(
+        self,
+        table: str,
+        payload: dict[str, Any],
+    ) -> Any:
         headers = {
             "ApplicationAccessKey": self.access_key,
             "Content-Type": "application/json",
@@ -56,9 +64,11 @@ class AppSheetClient:
 
         try:
             return response.json()
+
         except Exception as exc:
             raise AppSheetError(
-                f"AppSheet {table}: respuesta no JSON: {response.text[:1000]}"
+                f"AppSheet {table}: respuesta no JSON: "
+                f"{response.text[:1000]}"
             ) from exc
 
     def _properties(self) -> dict[str, Any]:
@@ -67,6 +77,63 @@ class AppSheetClient:
             "Timezone": self.timezone,
         }
 
+    @staticmethod
+    def _normalize_rows(
+        result: Any,
+        table: str,
+    ) -> list[dict[str, Any]]:
+        """
+        AppSheet puede devolver Find directamente como una lista JSON:
+
+        [
+          {"ID": "...", ...},
+          {"ID": "...", ...}
+        ]
+
+        Algunas respuestas/integraciones pueden venir envueltas:
+
+        {
+          "Rows": [
+            {...}
+          ]
+        }
+
+        Esta función acepta ambos formatos.
+        """
+
+        if isinstance(result, list):
+            return [
+                row
+                for row in result
+                if isinstance(row, dict)
+            ]
+
+        if isinstance(result, dict):
+            rows = result.get("Rows")
+
+            if rows is None:
+                rows = result.get("rows")
+
+            if rows is None:
+                return []
+
+            if isinstance(rows, list):
+                return [
+                    row
+                    for row in rows
+                    if isinstance(row, dict)
+                ]
+
+            raise AppSheetError(
+                f"AppSheet {table}: el campo Rows no es una lista. "
+                f"Tipo recibido: {type(rows).__name__}."
+            )
+
+        raise AppSheetError(
+            f"AppSheet {table}: formato de respuesta inesperado. "
+            f"Tipo recibido: {type(result).__name__}."
+        )
+
     def find_rows(
         self,
         table: str,
@@ -74,6 +141,7 @@ class AppSheetClient:
         key_rows: list[dict[str, Any]] | None = None,
     ) -> list[dict[str, Any]]:
         properties = self._properties()
+
         if selector:
             properties["Selector"] = selector
 
@@ -83,9 +151,15 @@ class AppSheetClient:
             "Rows": key_rows or [],
         }
 
-        result = self._post(table, payload)
-        rows = result.get("Rows", result if isinstance(result, list) else [])
-        return rows if isinstance(rows, list) else []
+        result = self._post(
+            table,
+            payload,
+        )
+
+        return self._normalize_rows(
+            result,
+            table,
+        )
 
     def find_by_key(
         self,
@@ -95,22 +169,33 @@ class AppSheetClient:
     ) -> dict[str, Any]:
         rows = self.find_rows(
             table,
-            key_rows=[{key_name: key_value}],
+            key_rows=[
+                {
+                    key_name: key_value
+                }
+            ],
         )
+
         if not rows:
             raise AppSheetError(
-                f"No se encontró {table}[{key_name}]={key_value!r}."
+                f"No se encontró "
+                f"{table}[{key_name}]={key_value!r}."
             )
+
         return rows[0]
 
     def edit_row(
         self,
         table: str,
         row: dict[str, Any],
-    ) -> dict[str, Any]:
+    ) -> Any:
         payload = {
             "Action": "Edit",
             "Properties": self._properties(),
             "Rows": [row],
         }
-        return self._post(table, payload)
+
+        return self._post(
+            table,
+            payload,
+        )

@@ -1,8 +1,8 @@
-# Informe Semanal de Obra Gruesa - V1.2
+# Informe Semanal de Obra Gruesa - V1.2.1
 
-## Cambios V1.2
+## Cambios V1.2.1
 
-La V1.2 reorganiza el informe con una lectura ejecutiva acumulada primero y el detalle semanal después.
+La V1.2.1 reorganiza el informe con una lectura ejecutiva acumulada primero y el detalle semanal después.
 
 ### Página 1 - Resumen ejecutivo acumulado
 Fuente principal: `SEMANAS_OBRA_GRUESA`.
@@ -71,11 +71,11 @@ Campos FACTURAS utilizados:
 ### Página 5 - Registro fotográfico
 
 `REGISTRO_AVANCE_SEMANAL[PISO]` es un Ref a `PISOS[ID_PISO]`.
-La V1.2 resuelve el Ref y muestra `PISOS[N PISO]` en el pie de foto.
+La V1.2.1 resuelve el Ref y muestra `PISOS[N PISO]` en el pie de foto.
 
 ### Corrección de fechas
 
-La API AppSheet de esta app usa `Locale=en-US`. La V1.2 interpreta primero `MM/DD/YYYY` y siempre imprime el PDF en `DD/MM/YYYY`.
+La API AppSheet de esta app usa `Locale=en-US`. La V1.2.1 interpreta primero `MM/DD/YYYY` y siempre imprime el PDF en `DD/MM/YYYY`.
 
 Ejemplos:
 
@@ -108,7 +108,7 @@ Se mantienen las existentes:
 - `REPORT_WEBHOOK_TOKEN`
 - `MAX_REPORT_PHOTOS=6`
 
-No se requiere ninguna variable nueva para V1.2.
+No se requiere ninguna variable nueva para V1.2.1.
 
 ## Deploy
 
@@ -133,3 +133,31 @@ Probar primero:
 `POST /informe-semanal/preview`
 
 Antes de activar/generar el PDF definitivo.
+
+
+## Corrección V1.2.1 - producción semanal
+
+La página de producción semanal ya no utiliza los valores virtuales
+`M3_PROGRAMADOS_SEMANA`, `M3_REALES_SEMANA`, `M3_GEOMETRICOS_SEMANA`,
+`GUIAS_LUN...SAB` ni `M3_LUN...SAB` de la fila `INFORME`.
+
+Ahora Cloud Run calcula en tiempo real:
+
+- M³ proyectados: `DETALLE_PROGRAMA[M3_PROGRAMADOS]`
+- M³ geométricos: `DETALLE_PROGRAMA[M3_GEOMETRICO]`
+- M³ reales: `GUIAS[CANTIDAD]`
+- % cumplimiento: `M3 reales / M3 proyectados`
+- % pérdida: `(M3 reales - M3 geométricos) / M3 reales`
+- Guías diarias: `GUIAS[FECHA_EMISION]`
+- Total tabla: suma exacta de las filas diarias mostradas
+
+Todos los registros se filtran por el `ID_SEMANA_OBRA_GRUE` de
+`SEMANAS_OBRA_GRUESA` correspondiente al informe.
+
+Las tendencias de las últimas 3 semanas también se recalculan desde
+`DETALLE_PROGRAMA` y `GUIAS`, evitando valores antiguos almacenados en
+columnas virtuales de `INFORME`.
+
+Si existe una guía vinculada a la semana pero su fecha no corresponde
+a lunes-sábado, se agrega una fila `Otros / sin fecha` para que el total
+siempre sea auditable y coincida con las filas visibles.

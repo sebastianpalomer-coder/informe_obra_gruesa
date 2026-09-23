@@ -161,3 +161,27 @@ columnas virtuales de `INFORME`.
 Si existe una guía vinculada a la semana pero su fecha no corresponde
 a lunes-sábado, se agrega una fila `Otros / sin fecha` para que el total
 siempre sea auditable y coincida con las filas visibles.
+
+
+## V1.2.2 - PROGRAMA_SEMANAL como fuente semanal
+
+La fuente oficial para los cinco KPI de producción semanal y para los cinco
+minigráficos de las últimas tres semanas pasa a ser `PROGRAMA_SEMANAL`.
+
+Columnas utilizadas:
+
+- `ID_SEMANA_OBRA_GRUE`
+- `M3 PROGRAMADOS`
+- `M3 REALES`
+- `M3 GEOMETRICOS`
+- `% CUMPLIMIENTO SEMANAL`
+- `% PERDIDA SEMANAL`
+
+Los gráficos toman la semana del informe y las dos semanas anteriores,
+relacionadas por `ID_SEMANA_OBRA_GRUE`.
+
+La tabla diaria se mantiene independiente y se calcula directamente desde
+`GUIAS`, porque su objetivo es auditar cantidad de guías y m³ por día.
+
+No se mezclan fuentes: los minigráficos ya no se reconstruyen desde
+`DETALLE_PROGRAMA` ni desde las guías.

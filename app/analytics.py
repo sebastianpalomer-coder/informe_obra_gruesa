@@ -319,81 +319,99 @@ def _sum_alias(
     return total
 
 
-def _week_metrics_from_sources(
-    week_row: dict[str, Any],
-    detail_rows: list[dict[str, Any]],
-    guide_rows: list[dict[str, Any]],
+def _program_week_id(row: dict[str, Any]) -> str:
+    return str(
+        pick(
+            row,
+            "ID_SEMANA_OBRA_GRUE",
+            "ID_SEMANA_OBRA_GRUESA",
+            default="",
+        )
+    ).strip()
+
+
+def _program_metric_row(
+    program_rows: list[dict[str, Any]],
+    week_id: Any,
+) -> dict[str, Any] | None:
+    target = str(week_id or "").strip()
+    if not target:
+        return None
+
+    matches = [
+        row for row in program_rows
+        if _program_week_id(row) == target
+    ]
+
+    if not matches:
+        return None
+
+    # Si por alguna razón existen varias filas para la misma semana,
+    # usar la última físicamente disponible.
+    matches.sort(
+        key=lambda row: (
+            int(to_float_or_none(row.get("_RowNumber")) or 0),
+            str(row.get("ID_SEMANA_PROGRAMA", "")),
+        )
+    )
+    return matches[-1]
+
+
+def _program_metrics(
+    program_row: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    week_id = _row_week_id(week_row)
-
-    detail_week = _rows_for_week(
-        detail_rows,
-        week_id,
-    )
-    guides_week = _rows_for_week(
-        guide_rows,
-        week_id,
-    )
-
-    projected = _sum_alias(
-        detail_week,
-        "M3_PROGRAMADOS",
-        "M3_PROYECTADOS",
-        "M3 PROGRAMADOS",
-        "M3 PROYECTADOS",
-    )
-
-    geometric = _sum_alias(
-        detail_week,
-        "M3_GEOMETRICO",
-        "M3_GEOMETRICOS",
-        "M3 GEOMETRICO",
-        "M3 GEOMETRICOS",
-    )
-
-    # Los m³ reales se obtienen de las guías efectivamente recibidas.
-    # Así el KPI semanal y la tabla diaria provienen de la misma fuente.
-    if guides_week:
-        real = _sum_alias(
-            guides_week,
-            "CANTIDAD",
-            "M3",
-            "M3_GUIA",
-        )
-    else:
-        # Fallback para semanas antiguas donde no existan guías cargadas.
-        real = _sum_alias(
-            detail_week,
-            "M3_REALES",
-            "M3_REAL",
-            "M3 REALES",
-        )
-
-    compliance = (
-        real / projected
-        if projected > 0
-        else None
-    )
-
-    loss = (
-        max((real - geometric) / real, 0.0)
-        if real > 0
-        else None
-    )
+    if not program_row:
+        return {
+            "projected": None,
+            "real": None,
+            "geometric": None,
+            "compliance": None,
+            "loss": None,
+        }
 
     return {
-        "week_id": week_id,
-        "projected": projected,
-        "real": real,
-        "geometric": geometric,
-        "compliance": compliance,
-        "loss": loss,
-        "guide_count": len(guides_week),
-        "guide_m3": _sum_alias(
-            guides_week,
-            "CANTIDAD",
-            "M3",
-            "M3_GUIA",
+        "projected": to_float_or_none(
+            pick(
+                program_row,
+                "M3 PROGRAMADOS",
+                "M3_PROGRAMADOS",
+                default=None,
+            )
+        ),
+        "real": to_float_or_none(
+            pick(
+                program_row,
+                "M3 REALES",
+                "M3_REALES",
+                default=None,
+            )
+        ),
+        "geometric": to_float_or_none(
+            pick(
+                program_row,
+                "M3 GEOMETRICOS",
+                "M3_GEOMETRICOS",
+                default=None,
+            )
+        ),
+        "compliance": to_percent_ratio(
+            pick(
+                program_row,
+                "% CUMPLIMIENTO SEMANAL",
+                "% CUMPLIMIENTO SEMA",
+                "%_CUMPLIMIENTO_SEMANAL",
+                "CUMPLIMIENTO_SEMANAL",
+                default=None,
+            )
+        ),
+        "loss": to_percent_ratio(
+            pick(
+                program_row,
+                "% PERDIDA SEMANAL",
+                "%_PERDIDA_SEMANAL",
+                "PERDIDA_SEMANAL",
+                default=None,
+            )
         ),
     }
 
@@ -424,18 +442,24 @@ def _last_three_weeks(
 def build_weekly_summary(
     weeks: list[dict[str, Any]],
     current_week: dict[str, Any] | None,
-    detail_rows: list[dict[str, Any]],
+    program_rows: list[dict[str, Any]],
     guide_rows: list[dict[str, Any]],
 ) -> dict[str, Any]:
     """
-    V1.2.1:
-    La producción semanal deja de depender de las columnas virtuales
-    almacenadas en INFORME.
+    V1.2.2
 
-    Fuentes:
-    - DETALLE_PROGRAMA -> m³ proyectados y geométricos
-    - GUIAS -> m³ reales, cantidad de guías y distribución diaria
-    - SEMANAS_OBRA_GRUESA -> identifica la semana actual y las dos anteriores
+    Fuente oficial de los cinco indicadores semanales y de los cinco
+    minigráficos: PROGRAMA_SEMANAL.
+
+    PROGRAMA_SEMANAL contiene una fila por semana con:
+    - M3 PROGRAMADOS
+    - M3 REALES
+    - M3 GEOMETRICOS
+    - % CUMPLIMIENTO SEMANAL
+    - % PERDIDA SEMANAL
+
+    La tabla diaria de guías sigue construyéndose desde GUIAS porque debe
+    mostrar el detalle real por fecha de emisión.
     """
 
     if current_week is None:
@@ -451,6 +475,8 @@ def build_weekly_summary(
             "daily": [],
             "guides_total": 0,
             "m3_total": 0.0,
+            "program_real": None,
+            "daily_real_difference": None,
         }
 
     source_weeks = _last_three_weeks(
@@ -458,16 +484,27 @@ def build_weekly_summary(
         current_week,
     )
 
-    metrics = [
-        _week_metrics_from_sources(
-            week_row,
-            detail_rows,
-            guide_rows,
+    metrics: list[dict[str, Any]] = []
+    for week_row in source_weeks:
+        week_id = _row_week_id(week_row)
+        program_row = _program_metric_row(
+            program_rows,
+            week_id,
         )
-        for week_row in source_weeks
-    ]
+        values = _program_metrics(program_row)
+        metrics.append(
+            {
+                **values,
+                "week_id": week_id,
+                "program_id": (
+                    program_row.get("ID_SEMANA_PROGRAMA")
+                    if program_row
+                    else None
+                ),
+            }
+        )
 
-    # Asegura siempre tres posiciones para los minigráficos.
+    # Siempre tres posiciones para mantener los minigráficos estables.
     padded: list[dict[str, Any]] = []
     missing = 3 - len(metrics)
 
@@ -479,8 +516,8 @@ def build_weekly_summary(
                 "geometric": None,
                 "compliance": None,
                 "loss": None,
-                "guide_count": 0,
-                "guide_m3": 0.0,
+                "week_id": None,
+                "program_id": None,
             }
         )
 
@@ -502,8 +539,11 @@ def build_weekly_summary(
             }
         )
 
-    current = chart_weeks[-1]
+    current = dict(chart_weeks[-1])
 
+    # ------------------------------------------------------------
+    # Detalle diario de guías de la semana actual
+    # ------------------------------------------------------------
     current_id = _row_week_id(current_week)
     current_guides = _rows_for_week(
         guide_rows,
@@ -564,9 +604,6 @@ def build_weekly_summary(
             buckets[offset]["guides"] += 1
             buckets[offset]["m3"] += qty
         else:
-            # Evita que el total de la tabla sea distinto a sus filas.
-            # Si aparece una guía sin fecha válida o fuera de lunes-sábado,
-            # se hace visible en vez de esconderla dentro del total.
             other_guides += 1
             other_m3 += qty
 
@@ -590,29 +627,11 @@ def build_weekly_summary(
         for row in daily_rows
     )
 
-    # El KPI M³ reales debe coincidir con el total de guías de la tabla.
-    current["real"] = m3_total
-    current["guide_count"] = guides_total
-    current["guide_m3"] = m3_total
-
-    if current.get("projected") not in (None, 0):
-        current["compliance"] = (
-            m3_total / current["projected"]
-        )
-    else:
-        current["compliance"] = None
-
-    if m3_total > 0 and current.get("geometric") is not None:
-        current["loss"] = max(
-            (m3_total - current["geometric"]) / m3_total,
-            0.0,
-        )
-    else:
-        current["loss"] = None
-
-    # Reemplazar también la última semana de la serie de tendencias
-    # con los valores reconciliados de la tabla diaria.
-    chart_weeks[-1] = current
+    # Diagnóstico interno: no altera el KPI de PROGRAMA_SEMANAL.
+    program_real = current.get("real")
+    difference = None
+    if program_real is not None:
+        difference = m3_total - program_real
 
     return {
         "weeks": chart_weeks,
@@ -620,6 +639,8 @@ def build_weekly_summary(
         "daily": daily_rows,
         "guides_total": guides_total,
         "m3_total": m3_total,
+        "program_real": program_real,
+        "daily_real_difference": difference,
     }
 
 

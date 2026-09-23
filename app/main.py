@@ -11,7 +11,7 @@ from .report_service import generate_and_publish, generate_preview
 
 app = FastAPI(
     title="Informe Semanal Obra Gruesa",
-    version="1.2.1",
+    version="1.2.2",
 )
 
 
@@ -45,7 +45,7 @@ def ping():
     return {
         "ok": True,
         "service": "informe-semanal-obra-gruesa",
-        "version": "1.2.1",
+        "version": "1.2.2",
     }
 
 

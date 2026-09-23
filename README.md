@@ -205,3 +205,65 @@ Cambios:
 
 Después del despliegue:
 `GET /ping` debe devolver `version: 1.2.3`.
+
+
+# V1.2.4 - Escritura de informes vía Apps Script
+
+## Motivo
+
+Una Service Account de Cloud Run puede leer archivos compartidos desde
+"Mi unidad", pero no dispone de cuota propia para crear archivos nuevos
+allí. V1.2.4 mantiene Cloud Run para generar el PDF y delega únicamente
+la escritura final a un Google Apps Script Web App ejecutado como el
+usuario propietario.
+
+Flujo:
+
+AppSheet -> Cloud Run -> genera PDF -> Apps Script Web App
+-> Mi unidad / INFORMES_SEMANALES -> AppSheet INFORME actualizado.
+
+## Archivos nuevos
+
+- `app/report_writer_client.py`
+- `apps_script/INFORME_DRIVE_WRITER_v1_0_0.gs`
+
+## Variables nuevas de Cloud Run
+
+- `REPORT_WRITER_URL`
+- `REPORT_WRITER_TOKEN`
+
+`REPORT_APPSHEET_PATH` permanece como `INFORMES_SEMANALES`.
+
+`REPORT_FOLDER_ID` ya no se usa por Cloud Run para crear el PDF.
+El ID de la carpeta se configura como Propiedad del script en Apps Script.
+
+## Propiedades del Apps Script
+
+En Configuración del proyecto -> Propiedades del script:
+
+- `REPORT_FOLDER_ID` = ID de la carpeta `INFORMES_SEMANALES`
+- `REPORT_WRITER_TOKEN` = mismo valor que `REPORT_WRITER_TOKEN` en Cloud Run
+
+## Despliegue del Apps Script
+
+Implementar -> Nueva implementación -> Aplicación web
+
+- Ejecutar como: Yo
+- Quién tiene acceso: Cualquiera
+
+Copiar la URL terminada en `/exec` y configurarla en Cloud Run como
+`REPORT_WRITER_URL`.
+
+## Prueba
+
+1. Abrir la URL del Web App en el navegador.
+2. Debe responder:
+   `{"ok":true,"service":"informe-semanal-drive-writer","version":"1.0.0"}`
+3. Desplegar Cloud Run V1.2.4.
+4. Verificar `/ping` -> `1.2.4`.
+5. Ejecutar `POST /informe-semanal` desde `/docs`.
+6. Confirmar:
+   - PDF creado en `INFORMES_SEMANALES`
+   - `ARCHIVO_INFORME` actualizado
+   - `ESTADO_INFORME = EMITIDO`
+   - `REGENERAR_INFORME = FALSE`

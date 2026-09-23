@@ -1,172 +1,135 @@
-\
-# Informe Semanal de Obra Gruesa - V1.0 Operativa
+# Informe Semanal de Obra Gruesa - V1.2
 
-Esta versión conecta AppSheet -> Cloud Run -> AppSheet/Drive.
+## Cambios V1.2
 
-## Flujo
+La V1.2 reorganiza el informe con una lectura ejecutiva acumulada primero y el detalle semanal después.
 
-1. El usuario completa una fila de `INFORME`.
-2. Acción AppSheet: `Generar informe`.
-3. La acción deja `REGENERAR_INFORME = TRUE`.
-4. Bot de AppSheet detecta el cambio y llama:
-   `POST /informe-semanal`
-5. El webhook envía solamente:
-   `{"id_informe":"<<[ID_INFORME]>>"}`
-6. Cloud Run consulta la tabla `INFORME` por API.
-   AppSheet devuelve también las columnas virtuales.
-7. El backend consulta:
-   - `OBRA`
-   - `VISTA_ALZAPRIMADO`
-   - `REGISTRO_AVANCE_SEMANAL`
-8. Descarga desde Google Drive:
-   - el SVG actual de alzaprimado
-   - fotografías con `INCLUIR_INFORME = TRUE`
-9. Genera el PDF.
-10. Guarda/reemplaza el PDF en:
-    `INFORMES_SEMANALES/Informe_Semanal_OG_<ID_INFORME>.pdf`
-11. Actualiza `INFORME`:
-    - `ARCHIVO_INFORME`
-    - `FECHA_EMISION`
-    - `ESTADO_INFORME = EMITIDO`
-    - `REGENERAR_INFORME = FALSE`
+### Página 1 - Resumen ejecutivo acumulado
+Fuente principal: `SEMANAS_OBRA_GRUESA`.
 
-## Endpoints
+Usa la fila correspondiente a `INFORME[ID_SEMANA_OBRA_GRUE]` y lee:
 
-### GET /ping
-Debe devolver `version: 1.0.0`.
+- `M3 ACUMULADO INFERIOR`
+- `M3 ACUMULADO SUPERIOR`
+- `M3 ACUMULADO REAL`
 
-### POST /informe-semanal
-Operativo: genera, sube a Drive y actualiza AppSheet.
+Calcula:
 
-Body:
-```json
-{
-  "id_informe": "ID_REAL"
-}
-```
+- brecha real vs banda inferior;
+- brecha real vs banda superior;
+- cumplimiento real / banda inferior;
+- cumplimiento real / banda superior;
+- estado general:
+  - REAL < INFERIOR -> ATRASADO
+  - INFERIOR <= REAL <= SUPERIOR -> EN RANGO
+  - REAL > SUPERIOR -> ADELANTADO
+- plazo transcurrido desde las fechas reales de obra;
+- proyección lineal de término de obra gruesa usando las últimas 3 semanas disponibles;
+- días de adelanto o atraso contra el término programado de obra gruesa.
 
-### POST /informe-semanal/preview
-Genera el PDF con datos reales y lo devuelve al navegador,
-pero no lo sube ni cambia `ARCHIVO_INFORME`.
+El gráfico de curvas usa toda `SEMANAS_OBRA_GRUESA`: banda inferior, banda superior y real acumulado.
 
-## Variables de entorno Cloud Run
+### Página 2 - Producción semanal
 
-Obligatorias:
+Muestra:
+
+- m³ proyectados;
+- m³ reales;
+- m³ geométricos;
+- % cumplimiento;
+- % pérdida.
+
+Incluye 5 gráficos pequeños de tendencia de las últimas 3 semanas y tabla diaria de guías/m³ de lunes a sábado.
+
+Si `%_PERDIDA_*` viene vacío, el backend lo calcula como:
+
+`(M3 real - M3 geométrico) / M3 real`
+
+### Página 3 - Alzaprimado
+
+Mantiene el módulo y SVG actual.
+
+### Página 4 - Facturación de hormigón
+
+Consulta directamente `FACTURAS` hasta `INFORME[FECHA_CORTE]` y calcula:
+
+- cantidad de facturas del mes;
+- neto facturado del mes;
+- total facturado del mes;
+- total facturado acumulado;
+- m³ facturados acumulados;
+- UF pendientes de facturación;
+- resumen de orden de compra.
+
+Campos FACTURAS utilizados:
+
+- `FECHA_EMISION`
+- `NETO_FACTURA`
+- `IVA_FACTURA`
+- `TOTAL_FACTURA`
+
+### Página 5 - Registro fotográfico
+
+`REGISTRO_AVANCE_SEMANAL[PISO]` es un Ref a `PISOS[ID_PISO]`.
+La V1.2 resuelve el Ref y muestra `PISOS[N PISO]` en el pie de foto.
+
+### Corrección de fechas
+
+La API AppSheet de esta app usa `Locale=en-US`. La V1.2 interpreta primero `MM/DD/YYYY` y siempre imprime el PDF en `DD/MM/YYYY`.
+
+Ejemplos:
+
+- API `09/01/2026` -> PDF `01/09/2026`
+- API `09/11/2026` -> PDF `11/09/2026`
+
+## Tablas que consulta el backend
+
+- `INFORME`
+- `OBRA`
+- `SEMANAS_OBRA_GRUESA`
+- `VISTA_ALZAPRIMADO`
+- `REGISTRO_AVANCE_SEMANAL`
+- `PISOS`
+- `FACTURAS`
+
+## Variables Cloud Run
+
+Se mantienen las existentes:
 
 - `APPSHEET_APP_ID`
 - `APPSHEET_ACCESS_KEY`
-- `APP_ROOT_FOLDER_ID`
-
-Recomendado:
-
-- `REPORT_WEBHOOK_TOKEN`
-
-Opcionales:
-
 - `APPSHEET_DOMAIN=www.appsheet.com`
 - `APPSHEET_LOCALE=en-US`
 - `APPSHEET_TIMEZONE=Pacific SA Standard Time`
-- `REPORT_FOLDER_NAME=INFORMES_SEMANALES`
+- `PHOTO_FOLDER_ID`
+- `SVG_FOLDER_ID`
+- `REPORT_FOLDER_ID`
+- `REPORT_APPSHEET_PATH=INFORMES_SEMANALES`
+- `REPORT_WEBHOOK_TOKEN`
 - `MAX_REPORT_PHOTOS=6`
 
-## Google Drive
+No se requiere ninguna variable nueva para V1.2.
 
-El servicio usa Application Default Credentials del Service Account de Cloud Run.
+## Deploy
 
-1. Habilitar `Google Drive API` en el proyecto.
-2. Identificar el Service Account utilizado por el servicio Cloud Run.
-3. Compartir con ese correo, como **Editor**, la carpeta raíz donde está
-   el Google Sheet de la aplicación y las carpetas de imágenes.
-4. Copiar el ID de esa carpeta a `APP_ROOT_FOLDER_ID`.
+Subir todo el contenido del ZIP a la raíz del repositorio, reemplazando los archivos anteriores.
 
-El SVG de alzaprimado actualmente se genera en la misma carpeta
-que el Google Sheet, por lo que el backend puede encontrarlo por `SVG_URI`.
+Después del despliegue:
 
-Los archivos de `REGISTRO_AVANCE_SEMANAL[IMAGEN]` se resuelven
-como rutas relativas desde la misma carpeta raíz.
+`GET /ping`
 
-## AppSheet
+debe responder:
 
-### Acción `Generar informe`
-
-Tabla: `INFORME`
-
-Tipo:
-`Data: set the values of some columns in this row`
-
-Valor:
-
-`REGENERAR_INFORME = TRUE`
-
-Condición sugerida:
-
-```appsheet
-AND(
-  ISNOTBLANK([ID_INFORME]),
-  ISNOTBLANK([BITACORA_SEMANAL]),
-  NOT([REGENERAR_INFORME])
-)
-```
-
-### Bot
-
-Evento:
-- Tabla: `INFORME`
-- Updates
-- Condition:
-
-```appsheet
-[REGENERAR_INFORME] = TRUE
-```
-
-Task:
-`Call a webhook`
-
-URL:
-`https://TU-SERVICIO.run.app/informe-semanal`
-
-HTTP Verb:
-`POST`
-
-Content Type:
-`JSON`
-
-Body:
-usar `appsheet/BODY_WEBHOOK_GENERAR_INFORME.json`
-
-Header:
-
-`X-Report-Token: <mismo valor de REPORT_WEBHOOK_TOKEN>`
-
-## Prueba antes de activar el Bot
-
-Abrir `/docs`.
-
-Probar primero:
-`POST /informe-semanal/preview`
-
-Body:
 ```json
 {
-  "id_informe": "ID_REAL_DE_INFORME"
+  "ok": true,
+  "service": "informe-semanal-obra-gruesa",
+  "version": "1.2.0"
 }
 ```
 
-Si se configuró `REPORT_WEBHOOK_TOKEN`, completar también
-el header `X-Report-Token`.
+Probar primero:
 
-Confirmar:
-- datos reales
-- SVG
-- fotografías elegidas
+`POST /informe-semanal/preview`
 
-Después probar:
-`POST /informe-semanal`
-
-y verificar que `ARCHIVO_INFORME` quede lleno en AppSheet.
-
-## Nota sobre AppSheet API
-
-La arquitectura usa `Find` para leer la fila de `INFORME`.
-Esto permite que el backend reciba también las columnas virtuales
-calculadas por AppSheet, evitando replicar todos los cálculos en Python.
+Antes de activar/generar el PDF definitivo.

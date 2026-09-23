@@ -16,7 +16,8 @@ from .analytics import (
 )
 from .appsheet_client import AppSheetClient
 from .charts import curvas_acumuladas, weekly_trend_charts
-from .drive_client import DriveClient, DriveUploadResult
+from .drive_client import DriveClient
+from .report_writer_client import ReportWriterClient, ReportWriterResult
 from .formatters import (
     first_value,
     fmt_clp,
@@ -351,7 +352,7 @@ def generate_preview(id_informe: str) -> tuple[bytes, dict[str, Any]]:
 
 def generate_and_publish(id_informe: str) -> dict[str, Any]:
     appsheet = AppSheetClient()
-    drive = DriveClient()
+    writer = ReportWriterClient()
 
     bundle = load_report_data(id_informe)
     pdf_bytes = render_pdf_bytes(id_informe, bundle)
@@ -363,7 +364,11 @@ def generate_and_publish(id_informe: str) -> dict[str, Any]:
 
     filename = f"Informe_Semanal_OG_{safe_id}.pdf"
 
-    uploaded: DriveUploadResult = drive.upload_or_replace_pdf(
+    # V1.2.4:
+    # El PDF se escribe mediante un Apps Script Web App ejecutado como
+    # el usuario propietario. Así evitamos la limitación de cuota de
+    # almacenamiento de las Service Accounts en Mi unidad.
+    uploaded: ReportWriterResult = writer.upload_or_replace_pdf(
         pdf_bytes,
         filename,
     )

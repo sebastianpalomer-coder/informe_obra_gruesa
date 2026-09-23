@@ -1,8 +1,6 @@
-\
 from __future__ import annotations
 
 import os
-from typing import Any
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import Response
@@ -13,7 +11,7 @@ from .report_service import generate_and_publish, generate_preview
 
 app = FastAPI(
     title="Informe Semanal Obra Gruesa",
-    version="1.1.2",
+    version="1.2.0",
 )
 
 
@@ -47,7 +45,7 @@ def ping():
     return {
         "ok": True,
         "service": "informe-semanal-obra-gruesa",
-        "version": "1.1.2",
+        "version": "1.2.0",
     }
 
 

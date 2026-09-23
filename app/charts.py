@@ -41,6 +41,17 @@ def curvas_acumuladas(
     series: list[dict[str, Any]],
     current_date: date | None,
 ) -> str | None:
+    """
+    Curva acumulada ejecutiva.
+
+    V1.2.3:
+    - eje X mensual y explícito en formato dd/mm/aa;
+    - etiquetas rotadas para evitar ambigüedad;
+    - leyenda completamente fuera del área de trazado;
+    - mayor margen superior para que las curvas nunca se crucen
+      visualmente con la leyenda;
+    - marca vertical de fecha de corte conservada.
+    """
     if not series:
         return None
 
@@ -52,7 +63,9 @@ def curvas_acumuladas(
     if not any(v is not None for v in lower + upper + real):
         return None
 
-    fig, ax = plt.subplots(figsize=(7.2, 2.55))
+    # Se aumenta levemente la altura para separar:
+    # título -> leyenda -> área de curvas -> eje X.
+    fig, ax = plt.subplots(figsize=(7.2, 2.95))
 
     ax.plot(
         dates,
@@ -60,19 +73,23 @@ def curvas_acumuladas(
         label="Banda inferior",
         linewidth=1.8,
         color=BRAND_MID,
+        zorder=3,
     )
+
     ax.plot(
         dates,
         upper,
         label="Banda superior",
         linewidth=1.8,
         color=BRAND_BLUE,
+        zorder=3,
     )
 
-    # Sombreado solo donde ambas bandas tienen valor.
+    # Sombreado de la banda de control.
     fill_dates = []
     fill_lower = []
     fill_upper = []
+
     for d, lo, up in zip(dates, lower, upper):
         if lo is not None and up is not None:
             fill_dates.append(d)
@@ -88,10 +105,19 @@ def curvas_acumuladas(
             alpha=0.55,
             linewidth=0,
             label="Banda de control",
+            zorder=1,
         )
 
-    real_dates = [d for d, v in zip(dates, real) if v is not None]
-    real_values = [v for v in real if v is not None]
+    # Curva real solamente hasta la última semana con dato real.
+    real_dates = [
+        d for d, v in zip(dates, real)
+        if v is not None
+    ]
+
+    real_values = [
+        v for v in real
+        if v is not None
+    ]
 
     if real_dates:
         ax.plot(
@@ -102,7 +128,9 @@ def curvas_acumuladas(
             marker="o",
             markersize=3.8,
             color=ACCENT_ORANGE,
+            zorder=4,
         )
+
         ax.scatter(
             [real_dates[-1]],
             [real_values[-1]],
@@ -111,36 +139,98 @@ def curvas_acumuladas(
             zorder=5,
         )
 
+    # Fecha de corte del informe.
     if current_date:
         ax.axvline(
             current_date,
             color=MUTED,
             linestyle="--",
             linewidth=1.0,
-            alpha=0.8,
+            alpha=0.80,
+            zorder=2,
         )
 
-    ax.set_title(
+    # El título es de figura para reservar una franja independiente.
+    fig.suptitle(
         "Curvas acumuladas de hormigón",
         color=BRAND_NAVY,
         fontweight="bold",
         fontsize=11,
+        y=0.985,
     )
-    ax.set_ylabel("m³ acumulados")
-    ax.xaxis.set_major_locator(mdates.AutoDateLocator(minticks=4, maxticks=7))
-    ax.xaxis.set_major_formatter(mdates.DateFormatter("%d/%m"))
-    ax.grid(axis="y", color=GRID, alpha=0.55, linewidth=0.7)
+
+    ax.set_ylabel(
+        "m³ acumulados",
+        fontsize=8.5,
+    )
+
+    ax.set_xlabel(
+        "Fecha",
+        fontsize=8,
+        labelpad=5,
+    )
+
+    # Un tick por mes, siempre el día 01.
+    # El año explícito evita confundir dd/mm con mm/dd.
+    ax.xaxis.set_major_locator(
+        mdates.MonthLocator(
+            bymonthday=1,
+            interval=1,
+        )
+    )
+
+    ax.xaxis.set_major_formatter(
+        mdates.DateFormatter("%d/%m/%y")
+    )
+
+    # Mejor lectura en PDF.
+    plt.setp(
+        ax.get_xticklabels(),
+        rotation=38,
+        ha="right",
+        rotation_mode="anchor",
+    )
+
+    ax.grid(
+        axis="y",
+        color=GRID,
+        alpha=0.55,
+        linewidth=0.7,
+        zorder=0,
+    )
+
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
-    ax.legend(
+
+    ax.tick_params(
+        axis="both",
+        labelsize=7.6,
+    )
+
+    # Leyenda fuera del área de datos:
+    # queda entre el título y el gráfico.
+    handles, labels = ax.get_legend_handles_labels()
+
+    fig.legend(
+        handles,
+        labels,
         frameon=False,
         ncol=4,
-        loc="upper left",
-        fontsize=7.5,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 0.915),
+        fontsize=7.4,
+        columnspacing=1.6,
+        handlelength=2.4,
     )
-    ax.tick_params(labelsize=8)
 
-    fig.tight_layout()
+    # Reserva explícita para título/leyenda y para fechas rotadas.
+    fig.subplots_adjust(
+        left=0.105,
+        right=0.985,
+        bottom=0.235,
+        top=0.735,
+    )
+
     return _fig_to_data_uri(fig)
 
 

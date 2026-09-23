@@ -38,6 +38,8 @@ STATIC_DIR = BASE_DIR / "static"
 TABLE_INFORME = "INFORME"
 TABLE_OBRA = "OBRA"
 TABLE_SEMANAS = "SEMANAS_OBRA_GRUESA"
+TABLE_DETALLE_PROGRAMA = "DETALLE_PROGRAMA"
+TABLE_GUIAS = "GUIAS"
 TABLE_VISTA = "VISTA_ALZAPRIMADO"
 TABLE_FOTOS = "REGISTRO_AVANCE_SEMANAL"
 TABLE_PISOS = "PISOS"
@@ -233,7 +235,15 @@ def load_report_data(id_informe: str) -> dict[str, Any]:
         current_week=current_week,
     )
 
-    weekly = build_weekly_summary(data)
+    detail_rows = appsheet.find_rows(TABLE_DETALLE_PROGRAMA)
+    guide_rows = appsheet.find_rows(TABLE_GUIAS)
+
+    weekly = build_weekly_summary(
+        weeks=week_rows,
+        current_week=current_week,
+        detail_rows=detail_rows,
+        guide_rows=guide_rows,
+    )
 
     invoice_rows = appsheet.find_rows(TABLE_FACTURAS)
     invoices = build_invoice_summary(

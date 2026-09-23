@@ -185,3 +185,23 @@ La tabla diaria se mantiene independiente y se calcula directamente desde
 
 No se mezclan fuentes: los minigráficos ya no se reconstruyen desde
 `DETALLE_PROGRAMA` ni desde las guías.
+
+
+## V1.2.3 - legibilidad curva acumulada
+
+Se modifica únicamente la presentación del gráfico
+`Curvas acumuladas de hormigón`.
+
+Cambios:
+- eje X mensual;
+- fechas en formato `dd/mm/aa`;
+- etiquetas inclinadas para mejorar lectura;
+- título, leyenda y área de curvas quedan en franjas independientes;
+- la leyenda se mueve fuera del área de trazado;
+- mayor margen superior para evitar que las curvas se superpongan
+  a la leyenda;
+- se conserva la línea vertical de fecha de corte;
+- no cambia ninguna fuente de datos ni cálculo de la V1.2.2.
+
+Después del despliegue:
+`GET /ping` debe devolver `version: 1.2.3`.

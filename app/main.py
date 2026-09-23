@@ -13,7 +13,7 @@ from .report_service import generate_and_publish, generate_preview
 
 app = FastAPI(
     title="Informe Semanal Obra Gruesa",
-    version="1.1.1",
+    version="1.1.2",
 )
 
 
@@ -47,7 +47,7 @@ def ping():
     return {
         "ok": True,
         "service": "informe-semanal-obra-gruesa",
-        "version": "1.1.1",
+        "version": "1.1.2",
     }
 
 
@@ -70,7 +70,23 @@ def informe_semanal(
         ) from exc
 
 
-@app.post("/informe-semanal/preview")
+@app.post(
+    "/informe-semanal/preview",
+    response_class=Response,
+    responses={
+        200: {
+            "description": "PDF de vista previa",
+            "content": {
+                "application/pdf": {
+                    "schema": {
+                        "type": "string",
+                        "format": "binary",
+                    }
+                }
+            },
+        }
+    },
+)
 def informe_semanal_preview(
     payload: InformeRequest,
     x_report_token: str | None = Header(
@@ -85,7 +101,7 @@ def informe_semanal_preview(
 
         headers = {
             "Content-Disposition": (
-                f'inline; filename="Informe_Semanal_OG_'
+                f'attachment; filename="Informe_Semanal_OG_'
                 f'{payload.id_informe}.pdf"'
             ),
             "X-Fotos-Incluidas": str(info["fotos_incluidas"]),

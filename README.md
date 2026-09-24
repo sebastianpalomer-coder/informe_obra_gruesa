@@ -289,3 +289,136 @@ Regla:
 
 El `Término programado OG` y el gráfico de curvas permanecen visibles
 desde el inicio; solamente se condiciona la proyección estadística.
+
+
+# V1.3.0 - Reporte fotográfico diario
+
+Se agrega un segundo PDF independiente del informe semanal.
+
+## Fuente
+
+Tabla:
+`REGISTRO_AVANCE_SEMANAL`
+
+Campos:
+- `FECHA`
+- `PISO`
+- `COMENTARIO`
+- `IMAGEN`
+
+El piso se resuelve contra:
+`PISOS[ID_PISO] -> PISOS[N PISO]`, con `PISOS[PISO]` como fallback.
+
+## Tabla AppSheet
+
+`INFORME_FOTOGRAFICO_DIARIO`
+
+Columnas esperadas:
+- `ID_INFORME_DIARIO`
+- `FECHA_INFORME`
+- `RESPONSABLE`
+- `ESTADO`
+- `ARCHIVO_INFORME`
+- `GENERAR_INFORME`
+- `FECHA_EMISION`
+
+## Endpoints
+
+### Preview
+
+POST `/reporte-fotografico-diario/preview`
+
+Body:
+
+```json
+{
+  "id_informe_diario": "ID_REAL"
+}
+```
+
+### Publicar
+
+POST `/reporte-fotografico-diario`
+
+Body:
+
+```json
+{
+  "id_informe_diario": "ID_REAL"
+}
+```
+
+Al publicar:
+- guarda el PDF en la carpeta diaria de Drive;
+- actualiza `ARCHIVO_INFORME`;
+- `ESTADO = EMITIDO`;
+- `GENERAR_INFORME = FALSE`;
+- completa `FECHA_EMISION`.
+
+## Apps Script Writer
+
+Reemplazar el código desplegado por:
+`apps_script/INFORME_DRIVE_WRITER_v1_1_0.gs`
+
+Agregar en Propiedades del script:
+
+- `DAILY_REPORT_FOLDER_ID`
+  = ID de la carpeta `REPORTES_FOTOGRAFICOS_DIARIOS`
+
+Mantener:
+- `REPORT_FOLDER_ID`
+- `REPORT_WRITER_TOKEN`
+
+Después de editar el Apps Script:
+`Implementar -> Administrar implementaciones -> Editar -> Nueva versión -> Implementar`
+
+La URL `/exec` no debería cambiar.
+
+## Cloud Run
+
+Agregar:
+
+`DAILY_REPORT_APPSHEET_PATH=REPORTES_FOTOGRAFICOS_DIARIOS`
+
+No se requiere el ID de la carpeta diaria en Cloud Run;
+ese ID queda solamente en Apps Script.
+
+## Bot AppSheet
+
+Acción:
+`GENERAR_INFORME = TRUE`
+
+Condición sugerida:
+
+```appsheet
+AND(
+  ISNOTBLANK([ID_INFORME_DIARIO]),
+  ISNOTBLANK([FECHA_INFORME]),
+  NOT([GENERAR_INFORME])
+)
+```
+
+Bot:
+- tabla: `INFORME_FOTOGRAFICO_DIARIO`
+- evento: Updates
+- condición:
+
+```appsheet
+[GENERAR_INFORME] = TRUE
+```
+
+Webhook:
+- POST
+- URL:
+  `https://informe-obra-gruesa-541351636997.southamerica-west1.run.app/reporte-fotografico-diario`
+- Header:
+  `X-Report-Token`
+- Body:
+  `appsheet/BODY_WEBHOOK_REPORTE_FOTOGRAFICO_DIARIO.json`
+
+## Nombre del PDF
+
+`Reporte_Fotografico_YYYY-MM-DD_<ID>.pdf`
+
+El diseño usa 6 fotografías por página (2 columnas x 3 filas)
+y agrega automáticamente páginas adicionales cuando hay más registros.

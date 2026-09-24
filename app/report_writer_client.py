@@ -22,11 +22,15 @@ class ReportWriterResult:
 
 class ReportWriterClient:
     """
-    Envía el PDF generado por Cloud Run a un Google Apps Script Web App.
+    Envía PDFs generados por Cloud Run al Google Apps Script Web App.
 
-    El Web App se ejecuta como el propietario humano del script, por lo que
-    puede crear el PDF dentro de Mi unidad sin utilizar cuota de almacenamiento
-    de la Service Account de Cloud Run.
+    El Web App se ejecuta como el propietario humano del script y puede
+    escribir en carpetas de "Mi unidad".
+
+    V1.3:
+    admite destinos lógicos:
+    - weekly       -> REPORT_FOLDER_ID
+    - daily_photos -> DAILY_REPORT_FOLDER_ID
     """
 
     def __init__(self) -> None:
@@ -40,9 +44,14 @@ class ReportWriterClient:
             "",
         ).strip()
 
-        self.report_appsheet_path = os.getenv(
+        self.weekly_appsheet_path = os.getenv(
             "REPORT_APPSHEET_PATH",
             "INFORMES_SEMANALES",
+        ).strip().strip("/")
+
+        self.daily_appsheet_path = os.getenv(
+            "DAILY_REPORT_APPSHEET_PATH",
+            "REPORTES_FOTOGRAFICOS_DIARIOS",
         ).strip().strip("/")
 
         if not self.writer_url:
@@ -59,9 +68,13 @@ class ReportWriterClient:
         self,
         pdf_bytes: bytes,
         filename: str,
+        *,
+        folder_key: str = "weekly",
+        appsheet_path: str | None = None,
     ) -> ReportWriterResult:
         payload = {
             "token": self.writer_token,
+            "folder_key": folder_key,
             "filename": filename,
             "content_type": "application/pdf",
             "content_base64": base64.b64encode(
@@ -120,13 +133,19 @@ class ReportWriterClient:
                 "Apps Script Writer no devolvió file_id."
             )
 
-        if self.report_appsheet_path:
-            relative_path = (
-                f"{self.report_appsheet_path}/"
-                f"{name}"
-            )
-        else:
-            relative_path = name
+        if appsheet_path is None:
+            if folder_key == "daily_photos":
+                appsheet_path = self.daily_appsheet_path
+            else:
+                appsheet_path = self.weekly_appsheet_path
+
+        clean_path = str(appsheet_path or "").strip().strip("/")
+
+        relative_path = (
+            f"{clean_path}/{name}"
+            if clean_path
+            else name
+        )
 
         return ReportWriterResult(
             file_id=file_id,

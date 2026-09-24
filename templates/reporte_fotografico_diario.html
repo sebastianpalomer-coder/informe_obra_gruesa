@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Reporte Fotográfico Diario</title>
+</head>
+<body>
+
+{% for pagina in photo_pages %}
+<section class="daily-page">
+
+  <header class="daily-header">
+    <div class="daily-brand">
+      {% if logo_path %}
+      <img src="{{ logo_path }}" alt="Altius">
+      {% endif %}
+    </div>
+
+    <div class="daily-title">
+      <h1>REPORTE FOTOGRÁFICO DIARIO</h1>
+      <p>Registro diario de avance de obra</p>
+    </div>
+  </header>
+
+  <div class="daily-meta">
+    <div>
+      <span>OBRA</span>
+      <strong>
+        {{ obra.get("NOMBRE_OBRA", "Obra") }}
+      </strong>
+    </div>
+
+    <div>
+      <span>FECHA</span>
+      <strong>{{ f.date(fecha) }}</strong>
+    </div>
+
+    <div>
+      <span>REGISTROS</span>
+      <strong>{{ fotos|length }}</strong>
+    </div>
+
+    <div>
+      <span>RESPONSABLE</span>
+      <strong>
+        {{ r.get("RESPONSABLE", "—") or "—" }}
+      </strong>
+    </div>
+  </div>
+
+  {% if pagina %}
+  <div class="daily-photo-grid">
+
+    {% for foto in pagina %}
+    <article class="daily-photo-card">
+
+      <img
+        src="{{ foto.imagen }}"
+        alt="Registro fotográfico"
+      >
+
+      <div class="daily-photo-info">
+
+        <div class="daily-photo-floor">
+          PISO {{ f.floor(foto.piso) }}
+        </div>
+
+        <div class="daily-photo-comment">
+          {{ foto.comentario }}
+        </div>
+
+      </div>
+
+    </article>
+    {% endfor %}
+
+  </div>
+  {% else %}
+
+  <div class="daily-empty">
+    No existen fotografías registradas para
+    {{ f.date(fecha) }}.
+  </div>
+
+  {% endif %}
+
+  <footer class="daily-footer">
+    <span>
+      Reporte generado automáticamente desde
+      el registro de terreno.
+    </span>
+    <span>
+      Página {{ loop.index }} de {{ photo_pages|length }}
+    </span>
+  </footer>
+
+</section>
+{% endfor %}
+
+</body>
+</html>

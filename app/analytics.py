@@ -23,6 +23,10 @@ REAL_KEYS = (
     "M3_ACUMULADO_REAL",
 )
 
+# Número mínimo de semanas cerradas con avance real antes de
+# publicar una proyección de término en el informe ejecutivo.
+MIN_PROJECTION_WEEKS = 6
+
 
 def pick(row: dict[str, Any], *keys: str, default: Any = None) -> Any:
     for key in keys:
@@ -216,7 +220,16 @@ def build_general_summary(
             # Primer día en que la banda superior llega al objetivo final.
             planned_finish = min(dates_at_target)
 
-    # Proyección lineal del ritmo reciente: últimas 3 semanas disponibles.
+    # Proyección lineal del ritmo reciente.
+    #
+    # V1.2.5:
+    # No se publica una fecha estimada hasta contar con al menos
+    # 6 semanas cerradas que tengan un valor real acumulado.
+    #
+    # Una vez alcanzado el mínimo, la pendiente se calcula usando
+    # precisamente las últimas 6 semanas válidas. Esto evita que las
+    # primeras semanas de excavación / arranque generen proyecciones
+    # extremadamente inestables.
     current_end = _week_date(current_week, end=True) or cutoff
     actual_points = [
         (item["date"], item["real"])
@@ -226,21 +239,44 @@ def build_general_summary(
         and item["date"] <= current_end
     ]
 
-    projection_points = actual_points[-3:]
-    slope = _linear_slope(projection_points)
+    completed_weeks_with_real = len(actual_points)
+    projection_available = (
+        completed_weeks_with_real >= MIN_PROJECTION_WEEKS
+    )
+
+    projection_points = (
+        actual_points[-MIN_PROJECTION_WEEKS:]
+        if projection_available
+        else []
+    )
+
+    slope = (
+        _linear_slope(projection_points)
+        if projection_available
+        else None
+    )
+
     estimated_finish = None
     deviation_days = None
 
-    if target is not None and current_end is not None:
+    if (
+        projection_available
+        and target is not None
+        and current_end is not None
+    ):
         if real >= target:
             estimated_finish = current_end
         elif slope is not None and slope > 0:
             remaining = max(0.0, target - real)
             days_remaining = remaining / slope
-            estimated_finish = current_end + timedelta(days=round(days_remaining))
+            estimated_finish = current_end + timedelta(
+                days=round(days_remaining)
+            )
 
         if estimated_finish and planned_finish:
-            deviation_days = (estimated_finish - planned_finish).days
+            deviation_days = (
+                estimated_finish - planned_finish
+            ).days
 
     return {
         "available": True,
@@ -261,6 +297,9 @@ def build_general_summary(
         "planned_finish_og": planned_finish,
         "estimated_finish": estimated_finish,
         "deviation_days": deviation_days,
+        "projection_available": projection_available,
+        "projection_min_weeks": MIN_PROJECTION_WEEKS,
+        "projection_completed_weeks": completed_weeks_with_real,
         "projection_slope_m3_day": slope,
         "projection_points": len(projection_points),
         "series": series,

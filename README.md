@@ -267,3 +267,25 @@ Copiar la URL terminada en `/exec` y configurarla en Cloud Run como
    - `ARCHIVO_INFORME` actualizado
    - `ESTADO_INFORME = EMITIDO`
    - `REGENERAR_INFORME = FALSE`
+
+
+# V1.2.5 - Proyección de término desde semana 6
+
+La proyección lineal deja de publicarse durante las primeras semanas
+de obra gruesa.
+
+Regla:
+
+- Menos de 6 semanas cerradas con `M3 ACUMULADO REAL`:
+  - no se calcula ni muestra fecha estimada de término;
+  - no se muestran días de adelanto/atraso;
+  - el informe indica cuántas semanas válidas existen de las 6 requeridas.
+
+- Desde 6 semanas cerradas con dato real:
+  - se utilizan las últimas 6 semanas válidas;
+  - se calcula regresión lineal del `M3 ACUMULADO REAL`;
+  - se proyecta la fecha en que se alcanzará el objetivo final;
+  - se compara contra `Término programado OG`.
+
+El `Término programado OG` y el gráfico de curvas permanecen visibles
+desde el inicio; solamente se condiciona la proyección estadística.

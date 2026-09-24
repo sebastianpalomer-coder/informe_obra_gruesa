@@ -91,6 +91,8 @@
       <span>Término programado OG</span>
       <strong>{{ f.date(general.get("planned_finish_og")) }}</strong>
     </div>
+
+    {% if general.get("projection_available") %}
     <div>
       <span>Fecha estimada de término</span>
       <strong>{{ f.date(general.get("estimated_finish")) }}</strong>
@@ -98,8 +100,29 @@
     <div>
       <span>Proyección lineal</span>
       <strong>{{ f.days_deviation(general.get("deviation_days")) }}</strong>
-      <small>Ritmo últimas {{ general.get("projection_points", 0) }} semanas</small>
+      <small>
+        Ritmo últimas {{ general.get("projection_points", 0) }} semanas
+      </small>
     </div>
+    {% else %}
+    <div class="projection-pending">
+      <span>Fecha estimada de término</span>
+      <strong>PENDIENTE</strong>
+      <small>
+        Disponible desde la semana
+        {{ general.get("projection_min_weeks", 6) }}
+      </small>
+    </div>
+    <div class="projection-pending">
+      <span>Proyección lineal</span>
+      <strong>NO DISPONIBLE</strong>
+      <small>
+        {{ general.get("projection_completed_weeks", 0) }}
+        de {{ general.get("projection_min_weeks", 6) }}
+        semanas con datos
+      </small>
+    </div>
+    {% endif %}
   </div>
   {% endif %}
 

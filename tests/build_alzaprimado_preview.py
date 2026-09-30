@@ -76,12 +76,12 @@ bundle={
     "weekly":weekly,"invoices":invoices,"svg":None,"photos":[],"warnings":[],"resistance":res,
 }
 base=Path(__file__).resolve().parent.parent
-out=base/'preview_resistencia_demo.pdf' 
+out=base/'preview_alzaprimado_historico_DEMO.pdf' 
 E=Environment(loader=FileSystemLoader(str(base/'templates')),autoescape=select_autoescape(['html','xml']))
 html=E.get_template('informe_semanal.html').render(
  d=bundle['data'], general=bundle['general'], weekly=bundle['weekly'],invoices=bundle['invoices'],
- resistance=bundle['resistance'], svg_alzaprimado=None,
- alz_snapshot={"detalle": "Sin instantánea histórica disponible para el corte del ejemplo.", "fecha": None}, fotos=[], warnings=[],chart_curves=None,
+ resistance=bundle['resistance'], svg_alzaprimado="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNzAwIiBoZWlnaHQ9Ijk4MCIgdmlld0JveD0iMCAwIDE3MDAgOTgwIj48cmVjdCB3aWR0aD0iMTcwMCIgaGVpZ2h0PSI5ODAiIGZpbGw9IiNmNWY4ZmQiLz48cmVjdCB4PSIzMCIgeT0iMjUiIHdpZHRoPSIxNjQwIiBoZWlnaHQ9IjExNSIgcng9IjE4IiBmaWxsPSIjMjc0Yzc3Ii8+PHRleHQgeD0iNzUiIHk9IjkzIiBmb250LWZhbWlseT0iQXJpYWwiIGZpbGw9IndoaXRlIiBmb250LXNpemU9IjQ2IiBmb250LXdlaWdodD0iYm9sZCI+Q09OVFJPTCBERSBBTFpBUFJJTUFTIC0gVklTVEEgREUgREVNT1NUUkFDScOTTjwvdGV4dD48dGV4dCB4PSI3NSIgeT0iMjAwIiBmb250LWZhbWlseT0iQXJpYWwiIGZpbGw9IiMzNTUzNzIiIGZvbnQtc2l6ZT0iMzUiPkVzdGEgaW1hZ2VuIHNpbXVsYSB1biBTVkcgYXJjaGl2YWRvIGVuIERyaXZlLjwvdGV4dD48dGV4dCB4PSI3NSIgeT0iMjU2IiBmb250LWZhbWlseT0iQXJpYWwiIGZpbGw9IiMzNTUzNzIiIGZvbnQtc2l6ZT0iMjkiPkNsb3VkIFJ1biBkZWJlcsOhIGVsZWdpciDDum5pY2FtZW50ZSBpbnN0YW50w6FuZWFzIGNhcHR1cmFkYXMgaGFzdGEgRkVDSEFfQ09SVEUuPC90ZXh0PjxyZWN0IHg9IjEwMCIgeT0iMzUwIiB3aWR0aD0iMTQ4MCIgaGVpZ2h0PSIzNzAiIHJ4PSIyMyIgZmlsbD0iI2UwZWFmNCIgc3Ryb2tlPSIjOTliNGNhIiBzdHJva2Utd2lkdGg9IjUiLz48dGV4dCB4PSI4NDAiIHk9IjUyMCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9Ijg1IiBmb250LXdlaWdodD0iYm9sZCIgZmlsbD0iIzE2Mzc2MCI+MjAvMDkvMjAyNiAtIDE3OjAwPC90ZXh0Pjx0ZXh0IHg9Ijg0MCIgeT0iNjMwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iNDciIGZpbGw9IiM0YjY0ODEiPkVKRU1QTE8gRklDVElDSU8sIE5PIEVTIEVTVEFETyBSRUFMIERFIExBIE9CUkE8L3RleHQ+PC9zdmc+",
+ alz_snapshot={"detalle": "Última instantánea archivada disponible antes del cierre. (Datos de demostración.)", "fecha": "20/09/2026 17:00"}, fotos=[], warnings=[],chart_curves=None,
  trend_charts=weekly_trend_charts(bundle['weekly']),
  logo_path=(base/'static/logo_altius.png').resolve().as_uri(),
  f=SimpleNamespace(date=f.fmt_date,m3=f.fmt_m3,num=f.fmt_number,pct=f.fmt_percent,clp=f.fmt_clp,

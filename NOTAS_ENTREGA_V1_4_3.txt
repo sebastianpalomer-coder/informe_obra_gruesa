@@ -1,0 +1,31 @@
+ENTREGA V1.4.3 - SVG ALZAPRIMADO CON FECHA DE CORTE
+
+Se corrige que un informe cerrado el 20/09/2026 mostrara un gráfico
+actualizado el 25/09/2026.
+
+DOS PASOS OBLIGATORIOS, EN ESTE ORDEN:
+1) Apps Script que genera SVG (NO el Drive Writer): reemplazar íntegramente
+   el script anterior por apps_script/VISTA_ALZAPRIMADO_v5_8_3_HISTORIAL_SVG.gs
+   para archivar todos los SVG futuros sin eliminar los anteriores.
+   Se mantiene la actualización habitual de VISTA_ALZAPRIMADO[SVG_URI].
+   Ejecutar actualizarVistaAlzaprimas() y comprobar el SVG en AppSheet.
+   RECOMENDADO: ejecutar instalarSnapshotDiarioAlzaprimas() una sola vez
+   para crear un snapshot nocturno a las 23:30 (Chile).
+   Configurar la zona horaria del script como America/Santiago.
+
+2) Subir el resto del ZIP a GitHub main, desplegar Cloud Run.
+   GET /ping debe mostrar 1.4.3. Mismas variables y URL webhook.
+   Opcional: REPORT_TIMEZONE=America/Santiago (valor por defecto).
+
+Comportamiento:
+- Si existen snapshots archivados hasta FECHA_CORTE, usa el último
+  disponible y muestra su fecha de creación bajo el gráfico.
+- Si solo hay snapshots creados DESPUÉS de FECHA_CORTE, no muestra el
+  gráfico actual: el PDF advierte que no existe archivo histórico.
+
+IMPORTANTE: los SVG antiguos que el script anterior ya mandó a la papelera
+no pueden regenerarse automáticamente. No se cambia el cálculo ni se
+historiza aquí la tabla de KPIs que aparece sobre el SVG.
+
+El archivo Apps Script completo también se entrega por separado
+para copiarlo directamente sin modificar su contenido.

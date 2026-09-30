@@ -1,4 +1,4 @@
-# Informe Semanal de Obra Gruesa - V1.2.1
+# Informe Semanal de Obra Gruesa - V1.4.3 (historial de alzaprimado)
 
 ## Cambios V1.2.1
 
@@ -575,3 +575,68 @@ mostrando `PISOS[N PISO]` como antes.
 
 No se alteran las cinco páginas existentes, el endpoint ni el flujo Drive Writer.
 Consultar `NOTAS_ENTREGA_V1_4_2.txt` para despliegue.
+
+
+## V1.4.3 - Gráfico de alzaprimado respetando FECHA_CORTE
+
+**Problema corregido:** Cloud Run tomaba la última fila `VISTA_ALZAPRIMADO[SVG_URI]`
+sin verificar su fecha. Por eso el informe con cierre 20/09/2026 mostraba un SVG
+actualizado el 25/09/2026: un estado posterior al periodo informado.
+
+**Diseño de la corrección:**
+
+1. Apps Script `VISTA_ALZAPRIMADO_v5_8_3_HISTORIAL_SVG.gs` deja de eliminar
+   los SVG anteriores. Cada actualización genera un archivo nuevo dentro
+   de la MISMA carpeta `SVG_Alzaprimado`; los nombres incluyen milisegundos
+   para evitar colisiones (`ALZAPRIMADO_<ID_VISTA>_yyyyMMdd_HHmmss_SSS.svg`).
+2. Cloud Run consulta Drive por `ID_VISTA` y selecciona el último archivo
+   que efectivamente se creó antes del final de `FECHA_CORTE` según
+   `REPORT_TIMEZONE` (por defecto `America/Santiago`).
+3. El PDF muestra la fecha **real de captura del archivo** bajo el SVG.
+   Puede ser anterior al cierre de semana; no se presenta como si
+   documentara sucesos posteriores a dicha captura.
+4. Si no existe ninguna instantánea anterior o igual a `FECHA_CORTE`,
+   **NO muestra el SVG actual**. Muestra un recuadro explicativo y emite
+   una advertencia en la respuesta del endpoint.
+
+### Instalación obligatoria de las dos piezas
+
+**PRIMERO: Apps Script de alzaprimado, NO el Drive Writer del PDF**
+
+- Abrir el proyecto Apps Script que genera `VISTA_ALZAPRIMADO[SVG_URI]`.
+- REEMPLAZAR TODO el contenido del archivo de alzaprimado que usa
+  `actualizarVistaAlzaprimas()` por el archivo completo
+  `apps_script/VISTA_ALZAPRIMADO_v5_8_3_HISTORIAL_SVG.gs`.
+- No añadirlo como segundo archivo junto al script anterior: contiene la
+  misma constante y las mismas funciones globales.
+- Verificar zona horaria `America/Santiago` en la configuración del proyecto.
+- Ejecutar `actualizarVistaAlzaprimas()` una vez y comprobar que `SVG_URI`
+  continúa mostrando el SVG activo como antes.
+- Opcional recomendado: ejecutar **una sola vez**
+  `instalarSnapshotDiarioAlzaprimas()` para programar una captura diaria
+  alrededor de las 23:30 (Chile), aunque no haya cambios de estado.
+- No renombrar ni mover SVG históricos de la carpeta.
+
+**DESPUÉS: GitHub / Cloud Run**
+
+- Reemplazar el código de `main` con el paquete completo V1.4.3.
+- Conservar las variables actuales, especialmente `SVG_FOLDER_ID`,
+  que ahora debe permitir LISTAR y LEER archivos para la Service Account.
+- `REPORT_TIMEZONE=America/Santiago` es opcional (ya es el valor predeterminado).
+- `GET /ping` debe responder `version: 1.4.3`.
+- Generar `/informe-semanal/preview` y comprobar bajo el SVG su fecha real.
+- No cambian webhooks, Bots de AppSheet ni el Drive Writer.
+
+**Limitación importante:** los SVG que la versión anterior eliminó NO se
+pueden reconstruir a partir del archivo activo. Un informe de fecha pasada
+sin archivo capturado antes de esa fecha mostrará el aviso de falta de
+instantánea. Este cambio protege todos los futuros cierres, pero no
+inventa historial retroactivo.
+
+**Alcance:** se historiza el DIAGRAMA SVG, no los KPI de la parte superior
+que `INFORME` entrega actualmente. Para tener una página 3 completamente
+congelada al cierre semanal también habrá que archivar esos contadores.
+
+Pruebas: `python -m unittest discover -s tests -v` (selección histórica,
+fecha local de Chile, sin fallback a estados posteriores, descarga por ID,
+resistencia y ubicaciones).

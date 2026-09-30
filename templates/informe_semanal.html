@@ -209,11 +209,12 @@
 
   {% if svg_alzaprimado %}
     <div class="alz-svg">
-      <img src="{{ svg_alzaprimado }}" alt="Estado de alzaprimado">
+      <img src="{{ svg_alzaprimado }}" alt="Instantánea archivada de alzaprimado">
     </div>
+    <p class="alz-snapshot-caption">Capturada el {{ alz_snapshot.fecha }}. {{ alz_snapshot.detalle }}</p>
   {% else %}
     <div class="placeholder">
-      No fue posible incorporar la visualización de alzaprimado.
+      {{ alz_snapshot.detalle or "No existe una instantánea histórica de alzaprimado para este corte." }}
     </div>
   {% endif %}
 </section>

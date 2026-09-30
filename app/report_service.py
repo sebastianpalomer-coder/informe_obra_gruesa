@@ -18,6 +18,8 @@ from .appsheet_client import AppSheetClient
 from .charts import curvas_acumuladas, weekly_trend_charts
 from .drive_client import DriveClient
 from .report_writer_client import ReportWriterClient, ReportWriterResult
+from .resistance_report import build_resistance_report
+from .resistance_charts import attach_resistance_charts
 from .formatters import (
     first_value,
     fmt_clp,
@@ -30,6 +32,7 @@ from .formatters import (
     fmt_percent,
     fmt_signed_m3,
     fmt_uf,
+    parse_appsheet_date,
 )
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -45,6 +48,10 @@ TABLE_VISTA = "VISTA_ALZAPRIMADO"
 TABLE_FOTOS = "REGISTRO_AVANCE_SEMANAL"
 TABLE_PISOS = "PISOS"
 TABLE_FACTURAS = "FACTURAS"
+TABLE_RESISTENCIAS = "TABLA_RESISTENCIA"
+TABLE_CERTIFICADOS = "TABLA_CERTIFICADO_HORMIGON"
+TABLE_VISITAS_MUESTRA = "TABLA_VISITA_TOMA_MUESTRA"
+TABLE_ELEMENTOS = "ELEMENTOS"
 
 env = Environment(
     loader=FileSystemLoader(str(TEMPLATE_DIR)),
@@ -255,6 +262,76 @@ def load_report_data(id_informe: str) -> dict[str, Any]:
 
     floor_rows = appsheet.find_rows(TABLE_PISOS)
     floor_map = build_floor_map(floor_rows)
+    # En el capítulo de resistencia se requiere la etiqueta de PISOS,
+    # mientras que las fotografías conservan el campo N PISO.
+    resistance_floor_map = {}
+    for floor_row in floor_rows:
+        floor_id = str(floor_row.get("ID_PISO") or "").strip()
+        if floor_id:
+            resistance_floor_map[floor_id] = (
+                floor_row.get("PISO") or floor_row.get("N PISO") or floor_id
+            )
+
+    # V1.4.0: el capítulo usa dos tablas de AppSheet. Las fechas de
+    # disponibilidad del certificado permiten reconstruir el corte semanal.
+    # Fallos de consulta no deben impedir emitir las cinco páginas existentes.
+    resistance_warnings = []
+    resistances = []
+    certificates = []
+    visits = []
+    elements = []
+    try:
+        resistances = appsheet.find_rows(TABLE_RESISTENCIAS)
+        certificates = appsheet.find_rows(TABLE_CERTIFICADOS)
+    except Exception as exc:
+        resistance_warnings.append(
+            f"No fue posible consultar tablas de resistencia: {exc}"
+        )
+
+    try:
+        visits = appsheet.find_rows(TABLE_VISITAS_MUESTRA)
+    except Exception as exc:
+        resistance_warnings.append(
+            f"No fue posible consultar TABLA_VISITA_TOMA_MUESTRA: {exc}; "
+            "se intentará ubicación secundaria desde otras tablas."
+        )
+
+    try:
+        elements = appsheet.find_rows(TABLE_ELEMENTOS)
+    except Exception as exc:
+        resistance_warnings.append(
+            f"No fue posible consultar ELEMENTOS: {exc}; "
+            "se mostrará ID_ELEMENTOS si no hay etiqueta disponible."
+        )
+    element_map = {
+        str(r.get("ID_ELEMENTOS") or "").strip(): str(r.get("ELEMENTO") or "").strip()
+        for r in elements
+        if str(r.get("ID_ELEMENTOS") or "").strip() and str(r.get("ELEMENTO") or "").strip()
+    }
+
+    cutoff = (
+        parse_appsheet_date(data.get("FECHA_CORTE"))
+        or general.get("week_end")
+    )
+    if cutoff is None:
+        from datetime import date
+        cutoff = date.today()
+        resistance_warnings.append(
+            "No se encontró FECHA_CORTE ni término de semana; se usa la fecha actual."
+        )
+
+    resistance = build_resistance_report(
+        rows=resistances,
+        certificates=certificates,
+        guide_rows=guide_rows,
+        floor_map=resistance_floor_map,
+        cutoff=cutoff,
+        element_map=element_map,
+        week_start=general.get("week_start"),
+        visit_rows=visits,
+    )
+    resistance["warnings"].extend(resistance_warnings)
+    attach_resistance_charts(resistance)
 
     vista_rows = appsheet.find_rows(TABLE_VISTA)
     vista = _choose_vista(vista_rows)
@@ -274,6 +351,7 @@ def load_report_data(id_informe: str) -> dict[str, Any]:
         "general": general,
         "weekly": weekly,
         "invoices": invoices,
+        "resistance": resistance,
         "svg": svg_data_uri,
         "photos": photos,
         "warnings": warnings,
@@ -292,6 +370,7 @@ def build_context(bundle: dict[str, Any]) -> dict[str, Any]:
         "general": general,
         "weekly": weekly,
         "invoices": bundle["invoices"],
+        "resistance": bundle["resistance"],
         "logo_path": (
             logo_file.resolve().as_uri()
             if logo_file.exists()
@@ -345,7 +424,8 @@ def generate_preview(id_informe: str) -> tuple[bytes, dict[str, Any]]:
         "id_informe": id_informe,
         "fotos_incluidas": len(bundle["photos"]),
         "svg_incluido": bool(bundle["svg"]),
-        "warnings": bundle["warnings"],
+        "warnings": bundle["warnings"] + bundle["resistance"]["warnings"],
+        "resistencia_grados": len(bundle["resistance"]["grades"]),
     }
     return pdf_bytes, info
 
@@ -396,5 +476,6 @@ def generate_and_publish(id_informe: str) -> dict[str, Any]:
         "fotos_incluidas": len(bundle["photos"]),
         "svg_incluido": bool(bundle["svg"]),
         "estado_general": bundle["general"].get("state"),
-        "warnings": bundle["warnings"],
+        "warnings": bundle["warnings"] + bundle["resistance"]["warnings"],
+        "resistencia_grados": len(bundle["resistance"]["grades"]),
     }

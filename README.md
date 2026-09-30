@@ -422,3 +422,156 @@ Webhook:
 
 El diseño usa 6 fotografías por página (2 columnas x 3 filas)
 y agrega automáticamente páginas adicionales cuando hay más registros.
+
+---
+
+# V1.4.0 - Capítulo 05: Ensayos de resistencia del hormigón
+
+Esta versión conserva las cinco secciones existentes y agrega, DESPUÉS del
+registro fotográfico, un capítulo acumulado de resistencia con una página
+resumen y una sección por cada grado encontrado en `TABLA_RESISTENCIA`.
+No se modifican los endpoints, Bots, carpeta de Drive, ni Apps Script Writer.
+`GET /ping` devuelve `version: 1.4.0`.
+
+## Lectura de datos
+
+El servicio lee, mediante la API de AppSheet:
+
+- `TABLA_RESISTENCIA` (físicas y virtuales):
+  `ID_MUESTRA`, `ID_GUIA`, `ID_CERTIFICADO`, `Grado del Hormigon`,
+  `Resistencia_Individual`, `Resis_Media_Movil`, `Resis_Indiv_Minima`,
+  `Resis_movil_minima`, `Fecha_Toma_Muestra`, `resistencia_Esperada` y
+  `CERTIFICADO_FINAL_28D`.
+- `TABLA_CERTIFICADO_HORMIGON`: `ID_CERTIFICADO`, `ID_GUIA`,
+  `FECHA_CERTIFICADO`, `R_7_DIAS`, `R_28_DIAS_1`, `R_28_DIAS_2` y
+  `FECHA_REGISTRO` (nuevo campo RECOMENDADO, véase abajo).
+- `GUIAS`: para mostrar el folio de la guía y la fecha que ya utiliza
+  `TABLA_RESISTENCIA[Fecha_Toma_Muestra]`.
+- `TABLA_VISITA_TOMA_MUESTRA` (incorporada en V1.4.1): `ID_VISITA`, `ID_GUIA`,
+  `PISO`, `ELEMENTO`, `DESCRIPCION_SECTOR` para la ubicación real de la muestra.
+- `PISOS`: convierte `TABLA_VISITA_TOMA_MUESTRA[PISO]` (Ref) a `N PISO`.
+
+Se agrupan todas las muestras de fecha <= `INFORME[FECHA_CORTE]` por grado.
+Solo un certificado con los TRES resultados (R7, R28-1 y R28-2) es definitivo.
+No se grafican muestras pendientes como si tuvieran resultado 0.
+
+### Requisito para cortes históricos exactos
+
+**Agregar una columna física** `FECHA_REGISTRO` a la hoja
+`TABLA_CERTIFICADO_HORMIGON` y regenerar estructura de AppSheet:
+
+- Type: `DateTime`
+- Initial value: `NOW()`
+- App formula: **vacío**
+- Editable: OFF
+- Show: opcional OFF
+
+Esta es la fecha en que se ingresó el certificado en AppSheet; es diferente a
+`FECHA_CERTIFICADO` (fecha que figura en el documento del laboratorio).
+Al automatizar OCR, la nueva fila debe conservar el momento real de ingreso.
+`VIGENTE` sigue funcionando como hasta ahora; NO se usa para reconstruir el
+pasado porque el certificado anterior ya no estará vigente cuando aparezca el
+segundo.
+
+Si faltan `FECHA_REGISTRO` en certificados antiguos, se utiliza
+`FECHA_CERTIFICADO` como fallback **aproximado** y se imprime una advertencia
+visible en el informe; NO se afirma que esos resultados ya estaban cargados al
+cierre. Para auditoría estricta, completar la fecha real de ingreso histórico
+cuando haya evidencia. Si el certificado no tiene ninguna fecha, se excluye del
+corte y se notifica.
+
+La proyección `resistencia_Esperada` actualmente es una VC. Cuando se compara
+un informe antiguo con certificados sustituidos y el R7 histórico no coincide
+con el actual, se omite la proyección, porque no hay registro persistido de la
+estimación calculada en la fecha original.
+
+### Criterios
+
+- Resistencia individual: se usa la VC `Resistencia_Individual` cuando el
+  certificado actual coincide con el vigente al corte. En cortes históricos,
+  donde difieren, se reconstruye exactamente `(R_28_DIAS_1 + R_28_DIAS_2)/2`
+  desde el certificado definitivo disponible al cierre.
+- Resistencia media móvil: se valida la VC `Resis_Media_Movil` cuando las tres
+  muestras pertenecen a la cohorte definitiva del corte. Cuando no se puede
+  reutilizar sin arrastrar datos futuros, se aplica el promedio de las tres
+  resistencias individuales consecutivas del MISMO grado, ordenadas por fecha
+  y guía. Si la VC difiere en más de 0.02 de la media reconstruida, el informe
+  utiliza el cálculo del corte y emite una advertencia.
+- Mínimos: `Resis_Indiv_Minima` y `Resis_movil_minima` llegan desde AppSheet.
+  Nunca se inventan mínimos. Si faltan, hay gráfico sin clasificación de
+  cumplimiento y una advertencia visible.
+- Proyección 7D: muestra solamente casos aún sin certificado definitivo cuya
+  `resistencia_Esperada` es menor al mínimo individual. Se presenta como
+  ALERTA INFORMATIVA; nunca se incorpora a la serie definitiva o media móvil.
+- Pendiente vencida: sin resultados 28D al cumplir 28 días desde la toma.
+
+### Salida y paginación
+
+- Capítulo 05, resumen global y tabla por grado.
+- Una página por grado cuando su contenido cabe en A4; si hay muchas
+  incidencias, WeasyPrint continúa automáticamente en páginas adicionales.
+- Cada grado incluye KPIs, tabla de alertas de proyección 7D,
+  gráfico de resistencia individual y tabla con muestras bajo el mínimo,
+  gráfico de media móvil de tres muestras y tabla con ventanas bajo el mínimo,
+  y tabla de resultados definitivos vencidos.
+- No se han modificado los diseños de los cinco capítulos anteriores.
+
+## Antes de la publicación real
+
+1. Confirmar en una respuesta real de la API de AppSheet que las VC nombradas
+   arriba se devuelven con sus valores calculados. Si no aparecen, revisar
+   tabla/slice/seguridad de AppSheet antes de afirmar cumplimiento.
+2. Agregar `FECHA_REGISTRO` para que los cortes históricos sean fiables.
+3. Confirmar el nombre exacto del campo de piso y la ubicación real de la
+   muestra; hoy el código busca distintas alternativas y muestra `—` si
+   ninguno existe. NO se presume que el piso de la guía sea necesariamente el
+   de la muestra sin corroborarlo.
+4. Verificar la UNIDAD reportada por el laboratorio (el gráfico dice
+   `Resistencia (unidad del ensayo)` hasta esa confirmación).
+5. En `/informe-semanal/preview`, revisar una guía con solo R7, otra con
+   certificado final y una situación individual / media móvil bajo mínimo.
+6. Una vez aprobada la vista previa, publicar con el Bot vigente.
+
+## Pruebas locales sin credenciales
+
+`python -m unittest discover -s tests -v`
+
+`python -m tests.build_preview`
+
+La segunda genera un PDF **DEMOSTRATIVO CON VALORES INVENTADOS** dentro de la
+carpeta del proyecto; nunca usarlo como informe de obra real.
+
+
+# V1.4.1 - Ubicación real de las muestras desde la visita
+
+Fuente confirmada de ubicación: `TABLA_VISITA_TOMA_MUESTRA`,
+relacionada por `TABLA_RESISTENCIA[ID_VISITA]` a `[ID_VISITA]` de visita.
+En las tablas de resistencia individuales, proyección 7D y certificados vencidos:
+
+- `PISO` proviene de `TABLA_VISITA_TOMA_MUESTRA[PISO]`, Ref resuelto con `PISOS[N PISO]`.
+- Ubicación combina `ELEMENTO` y `DESCRIPCION_SECTOR` de la visita.
+- Si falta el vínculo `ID_VISITA`, usa `ID_GUIA` solo cuando es una visita única;
+  si hay duplicados o referencias inconsistentes, genera advertencias.
+- `Fecha_Toma_Muestra` continúa siendo la fecha de control y NO se sustituye
+  automáticamente por `FECHA_VISITA`.
+- Los datos de ubicación de una visita agregada después de un cierre son
+  metadatos de ubicación actuales, no una reconstrucción histórica versionada.
+
+**Pendiente de configuración**: `ELEMENTO` es Ref. Sin conocer su tabla origen
+y columna Label, puede aparecer la clave interna en el PDF. Para mostrar el
+nombre legible, confirmar ambos y agregar el mapa de desreferencia.
+
+`GET /ping` versión 1.4.1. Sin cambios de webhook, Writer ni variables.
+
+
+## V1.4.2 - Resolución de etiquetas en el capítulo de resistencia
+
+Se consulta también `ELEMENTOS`; para cada fila de `TABLA_RESISTENCIA`,
+`ID_VISITA` se relaciona con `TABLA_VISITA_TOMA_MUESTRA`, donde
+`ELEMENTO` (Ref) se traduce desde `ELEMENTOS[ID_ELEMENTOS]` a `ELEMENTOS[ELEMENTO]`.
+Para este capítulo `PISO` se traduce desde `PISOS[ID_PISO]` a `PISOS[PISO]`.
+`DESCRIPCION_SECTOR` conserva su texto original. Los pies de las fotos siguen
+mostrando `PISOS[N PISO]` como antes.
+
+No se alteran las cinco páginas existentes, el endpoint ni el flujo Drive Writer.
+Consultar `NOTAS_ENTREGA_V1_4_2.txt` para despliegue.

@@ -1,0 +1,22 @@
+Informe Obra Gruesa V1.4.0 - Capítulo ensayos de resistencia
+
+Base: V1.3.0 proporcionada previamente.
+
+Cambios de código:
+- app/report_service.py: consulta TABLA_RESISTENCIA y TABLA_CERTIFICADO_HORMIGON
+  y agrega el bloque de resistencia a contexto.
+- app/resistance_report.py: agrupación por grado, cohorte al corte, cálculos,
+  controles y advertencias.
+- app/resistance_charts.py: dos gráficos por grado.
+- templates/informe_semanal.html: incluye nuevo capítulo al final.
+- templates/resistance_chapter.html: resumen y detalle por grado.
+- static/report.css: estilos exclusivos de la nueva sección.
+- app/main.py: versión 1.4.0 en API y /ping.
+- tests/test_resistance_report.py: pruebas offline.
+- tests/build_preview.py: PDF sintético de demostración.
+
+Nuevas dependencias: ninguna.
+Cambios de bots / webhook: ninguno.
+Cambios a Apps Script: ninguno.
+Requerimiento AppSheet: FECHA_REGISTRO DateTime NOW() para cortes históricos exactos.
+Ver README.md, sección V1.4.0, antes de poner en producción.

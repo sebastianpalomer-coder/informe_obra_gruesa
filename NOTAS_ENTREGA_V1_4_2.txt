@@ -1,0 +1,17 @@
+Informe Obra Gruesa V1.4.2 — Resolución de ELEMENTOS y PISOS en ensayos
+
+Fuentes confirmadas en AppSheet:
+- TABLA_RESISTENCIA[ID_VISITA] -> TABLA_VISITA_TOMA_MUESTRA[ID_VISITA]
+- TABLA_VISITA_TOMA_MUESTRA[ELEMENTO] -> ELEMENTOS[ID_ELEMENTOS], label ELEMENTOS[ELEMENTO]
+- TABLA_VISITA_TOMA_MUESTRA[PISO] -> PISOS[ID_PISO], label PISOS[PISO]
+- TABLA_VISITA_TOMA_MUESTRA[DESCRIPCION_SECTOR] -> texto
+
+V1.4.2 lee ELEMENTOS para resolver la etiqueta del elemento y PISOS[PISO]
+para el capítulo de resistencia. El pie de foto mantiene PISOS[N PISO]
+para evitar cambios visuales en el reporte existente. Si no existe un
+identificador en el mapa de elementos, se conserva el valor original.
+
+Sin cambios de AppSheet, bots, endpoints ni Apps Script.
+GET /ping debe devolver versión 1.4.2 tras despliegue.
+FECHA_REGISTRO en TABLA_CERTIFICADO_HORMIGON sigue siendo necesaria
+para reconstruir el corte histórico de los certificados.

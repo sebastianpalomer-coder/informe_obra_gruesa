@@ -1,0 +1,18 @@
+Informe Obra Gruesa V1.4.1 — Ubicación de ensayos desde visita de muestreo
+
+Base: paquete V1.4.0.
+
+Nueva consulta: TABLA_VISITA_TOMA_MUESTRA.
+Relación: TABLA_RESISTENCIA[ID_VISITA] -> TABLA_VISITA_TOMA_MUESTRA[ID_VISITA].
+Ubicación: [PISO] (Ref -> PISOS, resuelto por N PISO),
+[ELEMENTO] (Ref aún sin tabla destino/etiqueta confirmada) y
+[DESCRIPCION_SECTOR] (texto).
+Se aplica tanto a tablas de proyección como a incumplimientos y pendientes.
+Cuando ID_VISITA falta, solo se admite búsqueda alternativa por ID_GUIA
+si existe exactamente una visita para esa guía; de lo contrario, se advierte.
+No cambian Bots, endpoints ni App Script. /ping -> version 1.4.1.
+
+IMPORTANTE: Para mostrar el nombre real de ELEMENTO en lugar de su clave Ref,
+confirmar cuál es la tabla referenciada y cuál es su columna Label.
+FECHA_REGISTRO sigue siendo necesaria en TABLA_CERTIFICADO_HORMIGON
+para cortes históricos auditables.

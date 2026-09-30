@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
+import os
 from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -79,10 +80,9 @@ def _choose_vista(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
     if not usable:
         return None
 
-    usable.sort(
-        key=lambda r: _safe_int(r.get("_RowNumber"), 0),
-        reverse=True,
-    )
+    # El Apps Script v5.8.x genera la primera fila de VISTA_ALZAPRIMADO.
+    # Elegir la misma vista en Cloud Run evita mezclar archivos de distintas vistas.
+    usable.sort(key=lambda r: _safe_int(r.get("_RowNumber"), 999999))
     return usable[0]
 
 
@@ -126,17 +126,55 @@ def _load_media(
     vista: dict[str, Any] | None,
     photos: list[dict[str, Any]],
     floor_map: dict[str, Any],
-) -> tuple[str | None, list[dict[str, Any]], list[str]]:
+    cutoff: date,
+) -> tuple[str | None, list[dict[str, Any]], list[str], dict[str, Any]]:
     warnings: list[str] = []
     svg_data_uri: str | None = None
+    svg_snapshot: dict[str, Any] = {
+        "fecha": None,
+        "detalle": (
+            "No hay una instantánea histórica de alzaprimado conservada "
+            "hasta el cierre de este informe. No se incorpora el estado "
+            "actual porque podría incluir modificaciones posteriores."
+        ),
+    }
 
     if vista:
-        svg_path = str(vista.get("SVG_URI", "")).strip()
-        if svg_path:
+        id_vista = str(vista.get("ID_VISTA") or "").strip()
+        if not id_vista:
+            warnings.append(
+                "La vista actual de alzaprimado no tiene ID_VISTA; "
+                "no es posible localizar su historial."
+            )
+        else:
             try:
-                svg_data_uri = drive.data_uri_svg(svg_path)
+                # No leer el SVG_URI actual: este es mutable y puede
+                # representar eventos posteriores a FECHA_CORTE.
+                found = drive.historical_alzaprimado_svg(
+                    id_vista=id_vista,
+                    cutoff=cutoff,
+                    time_zone=os.getenv("REPORT_TIMEZONE", "America/Santiago"),
+                )
+                if found is not None:
+                    svg_data_uri, snapshot = found
+                    svg_snapshot = {
+                        "fecha": snapshot.created_local.strftime("%d/%m/%Y %H:%M"),
+                        "detalle": (
+                            "Última instantánea archivada disponible antes del "
+                            "cierre. Puede no incluir cambios posteriores "
+                            "a su fecha de captura."
+                        ),
+                    }
+                else:
+                    warnings.append(
+                        "Sin SVG histórico disponible para la vista "
+                        f"{id_vista} al corte {cutoff:%d/%m/%Y}. "
+                        "El SVG actual se omitió expresamente."
+                    )
             except Exception as exc:
-                warnings.append(f"SVG no incorporado: {exc}")
+                warnings.append(f"SVG histórico de alzaprimado no incorporado: {exc}")
+    else:
+        warnings.append("No hay VISTA_ALZAPRIMADO con SVG_URI disponible.")
 
     photo_context = []
 
@@ -166,7 +204,7 @@ def _load_media(
             }
         )
 
-    return svg_data_uri, photo_context, warnings
+    return svg_data_uri, photo_context, warnings, svg_snapshot
 
 
 def _select_obra(
@@ -339,11 +377,12 @@ def load_report_data(id_informe: str) -> dict[str, Any]:
     photo_rows = appsheet.find_rows(TABLE_FOTOS)
     selected = _selected_photos(photo_rows, week_id)
 
-    svg_data_uri, photos, warnings = _load_media(
+    svg_data_uri, photos, warnings, svg_snapshot = _load_media(
         drive=drive,
         vista=vista,
         photos=selected,
         floor_map=floor_map,
+        cutoff=cutoff,
     )
 
     return {
@@ -353,6 +392,7 @@ def load_report_data(id_informe: str) -> dict[str, Any]:
         "invoices": invoices,
         "resistance": resistance,
         "svg": svg_data_uri,
+        "svg_snapshot": svg_snapshot,
         "photos": photos,
         "warnings": warnings,
     }
@@ -382,6 +422,7 @@ def build_context(bundle: dict[str, Any]) -> dict[str, Any]:
         ),
         "trend_charts": weekly_trend_charts(weekly),
         "svg_alzaprimado": bundle["svg"],
+        "alz_snapshot": bundle.get("svg_snapshot") or {},
         "fotos": bundle["photos"],
         "warnings": bundle["warnings"],
         "f": {

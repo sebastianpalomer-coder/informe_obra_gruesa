@@ -4,9 +4,14 @@ import base64
 import io
 import os
 import re
+from datetime import date
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import Any
+
+from .alzaprimado_history import (
+    AlzaprimadoSnapshot, max_created_time_utc, safe_vista_id, select_snapshot,
+)
 
 import google.auth
 import requests
@@ -359,6 +364,62 @@ class DriveClient:
         return self.data_uri(
             svg_path
         )
+
+    def historical_alzaprimado_svg(
+        self,
+        id_vista: str,
+        cutoff: date,
+        time_zone: str = "America/Santiago",
+    ) -> tuple[str, AlzaprimadoSnapshot] | None:
+        """Recupera el último SVG conservado antes del cierre del informe.
+
+        No usa VISTA_ALZAPRIMADO[SVG_URI], ya que ese valor se sobrescribe
+        con la visualización actual y no documenta el estado pasado.
+        La carpeta solo contiene instantáneas si el Apps Script conserva
+        los archivos anteriores (v5.8.3 o posterior).
+        """
+        if not self.svg_folder_id:
+            raise DriveError(
+                "Falta SVG_FOLDER_ID para consultar el historial de alzaprimado."
+            )
+        safe_id = safe_vista_id(id_vista)
+        if not safe_id:
+            raise DriveError("VISTA_ALZAPRIMADO no informa ID_VISTA.")
+        until_utc = max_created_time_utc(cutoff, time_zone)
+        # La carpeta está dedicada a estos SVG. Se filtra por fecha en Drive
+        # y por nombre exacto/ID_VISTA en Python: `name contains` puede
+        # variar con la tokenización de guiones bajos en Drive.
+        q = (
+            f"'{self.svg_folder_id}' in parents and trashed = false "
+            f"and createdTime < '{until_utc}'"
+        )
+        files: list[dict[str, Any]] = []
+        next_page = None
+        while True:
+            response = self.service.files().list(
+                q=q,
+                spaces="drive",
+                fields="nextPageToken,files(id,name,mimeType,createdTime)",
+                pageSize=1000,
+                pageToken=next_page,
+            ).execute()
+            files.extend(response.get("files") or [])
+            next_page = response.get("nextPageToken")
+            if not next_page:
+                break
+        chosen = select_snapshot(
+            files, id_vista=id_vista, cutoff=cutoff, time_zone=time_zone,
+        )
+        if chosen is None:
+            return None
+        # Descargar por ID: nunca elegir por nombre si hay duplicados.
+        meta = {
+            "id": chosen.file_id,
+            "name": chosen.name,
+            "mimeType": "image/svg+xml",
+        }
+        content, _mime, _name = self._download_file(meta)
+        return self._as_data_uri(content, "image/svg+xml"), chosen
 
     def _ensure_report_folder_legacy(
         self,

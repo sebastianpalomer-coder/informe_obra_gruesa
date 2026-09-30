@@ -1,0 +1,166 @@
+<section class="page resistance-overview">
+  <h2 class="module-title">05 · Control de resistencia del hormigón</h2>
+  <div class="section-context">Corte al {{ f.date(resistance.cutoff) }} · Datos acumulados por grado de hormigón</div>
+  <div class="kpi-grid kpi-3 resistance-kpis">
+    <div class="kpi"><span>Muestras tomadas</span><strong>{{ resistance.summary.taken }}</strong></div>
+    <div class="kpi"><span>Resultados definitivos 28D</span><strong>{{ resistance.summary.final }}</strong></div>
+    <div class="kpi"><span>Pendientes 28D</span><strong>{{ resistance.summary.pending }}</strong></div>
+    <div class="kpi {% if resistance.summary.overdue %}resistance-danger{% endif %}"><span>Pendientes vencidas</span><strong>{{ resistance.summary.overdue }}</strong></div>
+    <div class="kpi {% if resistance.summary.individual_failures %}resistance-danger{% endif %}"><span>Individuales bajo mínimo</span><strong>{{ resistance.summary.individual_failures if resistance.summary.individual_evaluated else '—' }}</strong><small>{{ resistance.summary.individual_evaluated }} evaluadas con límite</small></div>
+    <div class="kpi {% if resistance.summary.moving_failures %}resistance-danger{% endif %}"><span>Medias móviles bajo mínimo</span><strong>{{ resistance.summary.moving_failures if resistance.summary.moving_evaluated else '—' }}</strong><small>{{ resistance.summary.moving_evaluated }} evaluadas con límite</small></div>
+  </div>
+
+  <div class="resistance-week-strip">
+    <div><span>Nuevas muestras durante la semana</span><strong>{{ resistance.summary.week_taken }}</strong></div>
+    <div><span>Resultados finales incorporados en la semana</span><strong>{{ resistance.summary.week_results }}</strong></div>
+  </div>
+  {% if resistance.historical_estimated %}
+  <div class="resistance-disclaimer">
+    Corte histórico aproximado: hay certificados sin FECHA_REGISTRO. La fecha del documento
+    no garantiza la fecha de carga en AppSheet. Los datos históricos deben revisarse.
+  </div>
+  {% endif %}
+
+  <h3 class="sub-title">Resumen acumulado por grado</h3>
+  {% if resistance.grades %}
+  <table class="data-table resistance-table">
+    <thead>
+      <tr>
+        <th>Grado</th><th>Tomadas</th><th>Finales</th><th>Pend.</th><th>Vencidas</th>
+        <th>Individuales bajo mínimo</th><th>Medias móviles bajo mínimo</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for g in resistance.grades %}
+      <tr>
+        <td><strong>{{ g.grade }}</strong></td>
+        <td>{{ g.summary.taken }}</td><td>{{ g.summary.final }}</td><td>{{ g.summary.pending }}</td>
+        <td class="{% if g.summary.overdue %}resistance-alert-text{% endif %}">{{ g.summary.overdue }}</td>
+        <td class="{% if g.summary.individual_failures %}resistance-alert-text{% endif %}">{{ g.summary.individual_failures if g.summary.individual_evaluated else '—' }}</td>
+        <td class="{% if g.summary.moving_failures %}resistance-alert-text{% endif %}">{{ g.summary.moving_failures if g.summary.moving_evaluated else '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="placeholder">No hay muestras con grado y fecha válidos para este corte.</div>
+  {% endif %}
+
+  <p class="resistance-caption">«—» significa que no existe una muestra o ventana con umbral válido para evaluar; no implica conformidad.</p>
+  <div class="resistance-method-note">
+    <strong>Criterio de lectura:</strong> resistencia individual = promedio de los dos testigos
+    ensayados a los 28 días. Media móvil = promedio de tres resistencias individuales
+    definitivas consecutivas del mismo grado. La proyección basada en el ensayo de 7 días
+    es informativa y NO participa de los dos análisis de cumplimiento.
+  </div>
+  {% if resistance.warnings %}
+    <div class="technical-note resistance-warnings">
+      <strong>Observaciones de datos:</strong>
+      {% for warning in resistance.warnings %}<p>• {{ warning }}</p>{% endfor %}
+    </div>
+  {% endif %}
+</section>
+
+{% for g in resistance.grades %}
+<section class="page resistance-grade">
+  <h2 class="module-title">05 · Ensayos de resistencia · {{ g.grade }}</h2>
+  <div class="section-context">Acumulado al {{ f.date(resistance.cutoff) }} · {{ g.summary.taken }} muestras registradas</div>
+  <div class="kpi-grid kpi-3 resistance-grade-kpis">
+    <div class="kpi"><span>Muestras tomadas</span><strong>{{ g.summary.taken }}</strong></div>
+    <div class="kpi"><span>Resultados definitivos</span><strong>{{ g.summary.final }}</strong></div>
+    <div class="kpi {% if g.summary.overdue %}resistance-danger{% endif %}"><span>Pendientes vencidas</span><strong>{{ g.summary.overdue }}</strong></div>
+  </div>
+
+  <h3 class="resistance-sub">Proyección informativa desde los 7 días</h3>
+  <p class="resistance-caption">
+    {{ g.summary.projected }} proyecciones pendientes de confirmación;
+    {{ g.summary.projection_alerts }} bajo el mínimo individual proyectado.
+    Las proyecciones no constituyen resultados de aceptación.
+  </p>
+  {% if g.projection_alerts %}
+  <table class="data-table resistance-table resistance-tight">
+    <thead><tr><th>Guía</th><th>Toma</th><th>Piso</th><th>Ubicación</th><th>R7</th><th>R28 esperada</th><th>Mín. indiv.</th></tr></thead>
+    <tbody>
+      {% for x in g.projection_alerts %}
+      <tr>
+        <td>{{ x.guia }}</td><td>{{ f.date(x.date) }}</td><td>{{ x.floor }}</td>
+        <td>{{ x.location }}</td><td>{{ f.num(x.r7, 2) }}</td>
+        <td class="resistance-alert-text">{{ f.num(x.expected, 2) }}</td>
+        <td>{{ f.num(x.min_individual, 2) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="resistance-ok-line">No se registran proyecciones disponibles bajo el mínimo individual.</p>
+  {% endif %}
+
+  <h3 class="resistance-sub">Resistencia individual a 28 días</h3>
+  {% if g.chart_individual %}
+  <div class="resistance-chart"><img src="{{ g.chart_individual }}" alt="Resistencia individual {{ g.grade }}"></div>
+  {% else %}
+  <p class="resistance-empty">Sin resultados definitivos suficientes para graficar.</p>
+  {% endif %}
+
+  {% if g.individual_failures %}
+  <table class="data-table resistance-table resistance-tight">
+    <thead><tr><th>Guía</th><th>Toma</th><th>Piso</th><th>Ubicación</th><th>R. indiv.</th><th>Mínima</th><th>Diferencia</th></tr></thead>
+    <tbody>
+      {% for x in g.individual_failures %}
+      <tr>
+        <td>{{ x.guia }}</td><td>{{ f.date(x.date) }}</td><td>{{ x.floor }}</td><td>{{ x.location }}</td>
+        <td class="resistance-alert-text">{{ f.num(x.individual, 2) }}</td>
+        <td>{{ f.num(x.min_individual, 2) }}</td>
+        <td class="resistance-alert-text">{{ f.num(x.difference, 2) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="resistance-ok-line">No se identifican resultados individuales bajo el mínimo entre los que tienen umbral registrado.</p>
+  {% endif %}
+
+  <h3 class="resistance-sub">Media móvil de tres muestras definitivas</h3>
+  {% if g.chart_moving %}
+  <div class="resistance-chart"><img src="{{ g.chart_moving }}" alt="Media móvil {{ g.grade }}"></div>
+  {% else %}
+  <p class="resistance-empty">Se requieren al menos tres muestras definitivas de este grado.</p>
+  {% endif %}
+
+  {% if g.moving_failures %}
+  <table class="data-table resistance-table resistance-tight">
+    <thead><tr><th>Tres guías de la ventana</th><th>Última toma</th><th>Piso última</th><th>Media móvil</th><th>Mínima</th><th>Diferencia</th></tr></thead>
+    <tbody>
+      {% for x in g.moving_failures %}
+      <tr>
+        <td>{{ x.guides }}</td><td>{{ f.date(x.date) }}</td><td>{{ x.floor }}</td>
+        <td class="resistance-alert-text">{{ f.num(x.value, 2) }}</td>
+        <td>{{ f.num(x.minimum, 2) }}</td><td class="resistance-alert-text">{{ f.num(x.difference, 2) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="resistance-ok-line">No se identifican medias móviles bajo el mínimo entre las que tienen umbral registrado.</p>
+  {% endif %}
+
+  {% if g.overdue %}
+  <h3 class="resistance-sub">Resultados definitivos vencidos</h3>
+  <table class="data-table resistance-table resistance-tight">
+    <thead><tr><th>Guía</th><th>Fecha toma</th><th>Piso</th><th>Ubicación</th><th>Fecha 28D</th><th>Días desde toma</th></tr></thead>
+    <tbody>
+      {% for x in g.overdue %}
+      <tr><td>{{ x.guia }}</td><td>{{ f.date(x.date) }}</td><td>{{ x.floor }}</td>
+        <td>{{ x.location }}</td><td>{{ f.date(x.due28) }}</td>
+        <td class="resistance-alert-text">{{ (resistance.cutoff - x.date).days }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  {% if g.warnings %}
+    <div class="technical-note resistance-warnings">
+      {% for warn in g.warnings %}<p>• {{ warn }}</p>{% endfor %}
+    </div>
+  {% endif %}
+</section>
+{% endfor %}

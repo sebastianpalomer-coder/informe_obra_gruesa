@@ -53,6 +53,14 @@ class DriveClient:
             "",
         ).strip()
 
+        # Carpeta dedicada a los archivos de pedidos de fierro cargados
+        # desde AppSheet. Si no se define, se resuelve ARCHIVO_PEDIDO
+        # como ruta relativa desde APP_ROOT_FOLDER_ID.
+        self.fierro_pedidos_folder_id = os.getenv(
+            "FIERRO_PEDIDOS_FOLDER_ID",
+            "",
+        ).strip()
+
         # Ruta relativa que se escribirá en INFORME[ARCHIVO_INFORME].
         # Debe coincidir con la ubicación que AppSheet reconoce
         # respecto de la carpeta del archivo fuente.
@@ -277,6 +285,35 @@ class DriveClient:
             mime_type,
             name,
         )
+
+    def download_path(
+        self,
+        value: str,
+    ) -> tuple[bytes, str, str]:
+        meta = self.resolve_path_from_root(value)
+        return self._download_file(meta)
+
+    def download_from_folder(
+        self,
+        folder_id: str,
+        file_name_or_path: str,
+    ) -> tuple[bytes, str, str]:
+        meta = self.resolve_file_in_folder(
+            folder_id,
+            file_name_or_path,
+        )
+        return self._download_file(meta)
+
+    def download_fierro_order(
+        self,
+        file_path: str,
+    ) -> tuple[bytes, str, str]:
+        if self.fierro_pedidos_folder_id:
+            return self.download_from_folder(
+                self.fierro_pedidos_folder_id,
+                file_path,
+            )
+        return self.download_path(file_path)
 
     @staticmethod
     def _as_data_uri(

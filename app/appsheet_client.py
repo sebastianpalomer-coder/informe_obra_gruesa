@@ -184,6 +184,45 @@ class AppSheetClient:
 
         return rows[0]
 
+
+    def add_rows(
+        self,
+        table: str,
+        rows: list[dict[str, Any]],
+    ) -> Any:
+        if not rows:
+            return {}
+
+        payload = {
+            "Action": "Add",
+            "Properties": self._properties(),
+            "Rows": rows,
+        }
+
+        return self._post(
+            table,
+            payload,
+        )
+
+    def delete_rows(
+        self,
+        table: str,
+        key_rows: list[dict[str, Any]],
+    ) -> Any:
+        if not key_rows:
+            return {}
+
+        payload = {
+            "Action": "Delete",
+            "Properties": self._properties(),
+            "Rows": key_rows,
+        }
+
+        return self._post(
+            table,
+            payload,
+        )
+
     def edit_row(
         self,
         table: str,

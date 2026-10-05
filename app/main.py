@@ -14,11 +14,12 @@ from .report_service import (
     generate_and_publish,
     generate_preview,
 )
+from .fierro_order_service import process_fierro_order
 
 
 app = FastAPI(
     title="Informes Obra Gruesa",
-    version="1.4.3",
+    version="1.5.0",
 )
 
 
@@ -41,6 +42,18 @@ class DailyPhotoReportRequest(BaseModel):
         json_schema_extra={
             "example": {
                 "id_informe_diario": "REEMPLAZAR_POR_ID_REAL"
+            }
+        }
+    )
+
+
+class FierroOrderRequest(BaseModel):
+    id_pedido_fierro: str = Field(min_length=1)
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "id_pedido_fierro": "REEMPLAZAR_POR_ID_REAL"
             }
         }
     )
@@ -72,8 +85,33 @@ def ping():
     return {
         "ok": True,
         "service": "informes-obra-gruesa",
-        "version": "1.4.3",
+        "version": "1.5.0",
     }
+
+
+# ============================================================
+# PEDIDOS DE FIERRO
+# ============================================================
+
+@app.post("/pedido-fierro")
+def pedido_fierro(
+    payload: FierroOrderRequest,
+    x_report_token: str | None = Header(
+        default=None,
+        alias="X-Report-Token",
+    ),
+):
+    _validate_token(x_report_token)
+
+    try:
+        return process_fierro_order(
+            payload.id_pedido_fierro
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=str(exc),
+        ) from exc
 
 
 # ============================================================

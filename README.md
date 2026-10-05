@@ -640,3 +640,56 @@ congelada al cierre semanal también habrá que archivar esos contadores.
 Pruebas: `python -m unittest discover -s tests -v` (selección histórica,
 fecha local de Chile, sin fallback a estados posteriores, descarga por ID,
 resistencia y ubicaciones).
+
+## V1.5.0 - Pedidos de fierro
+
+Se incorpora procesamiento automático de las planillas `.xls` / `.xlsx`
+cargadas en `PEDIDOS_FIERRO[ARCHIVO_PEDIDO]`.
+
+Nuevo endpoint:
+
+`POST /pedido-fierro`
+
+Body:
+
+```json
+{
+  "id_pedido_fierro": "ID_REAL"
+}
+```
+
+Seguridad: utiliza el mismo header `X-Report-Token` y la misma variable
+`REPORT_WEBHOOK_TOKEN` del informe semanal.
+
+El servicio extrae:
+
+- número de pedido;
+- área;
+- fecha de pedido;
+- fecha requerida en obra;
+- hora requerida;
+- diámetro;
+- largo;
+- kg/mt;
+- barras solicitadas;
+- kg solicitados.
+
+Las líneas se escriben en `PEDIDOS_FIERRO_DETALLE`. Si el mismo pedido se
+reprocesa, primero se elimina su detalle anterior para evitar duplicados.
+
+### Importante: HORA_REQUERIDA
+
+Debe ser `Text`, no `Time`. Las planillas reales incluyen valores como `AM`,
+`10 y 12 am` y también horas reales como `09:00`.
+
+### Variable Drive recomendada
+
+```text
+FIERRO_PEDIDOS_FOLDER_ID=<ID_DE_LA_CARPETA>
+```
+
+La Service Account de Cloud Run debe tener acceso de lectura a esa carpeta.
+Si la variable se deja vacía, se intenta resolver `ARCHIVO_PEDIDO` como ruta
+relativa desde `APP_ROOT_FOLDER_ID`.
+
+Después del despliegue, `GET /ping` debe devolver `version: 1.5.0`.

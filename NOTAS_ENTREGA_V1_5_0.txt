@@ -1,0 +1,49 @@
+V1.5.0 - Importación automática de pedidos de fierro
+
+Nuevo endpoint:
+POST /pedido-fierro
+Header: X-Report-Token (mismo REPORT_WEBHOOK_TOKEN existente)
+Body:
+{
+  "id_pedido_fierro": "<<[ID_PEDIDO_FIERRO]>>"
+}
+
+Tablas esperadas:
+PEDIDOS_FIERRO
+- ID_PEDIDO_FIERRO (Key)
+- N_PEDIDO
+- FECHA_PEDIDO
+- FECHA_REQUERIDA_OBRA
+- HORA_REQUERIDA  IMPORTANTE: tipo Text
+- AREA
+- ARCHIVO_PEDIDO (File)
+- ESTADO_PROCESAMIENTO
+- FECHA_PROCESAMIENTO
+- OBSERVACION_PROCESAMIENTO
+
+PEDIDOS_FIERRO_DETALLE
+- ID_DETALLE_PEDIDO (Key)
+- ID_PEDIDO_FIERRO (Ref)
+- DIAMETRO_MM
+- LARGO_M
+- KG_MT
+- BARRAS_SOLICITADAS
+- KG_SOLICITADOS
+
+Variable recomendada Cloud Run:
+FIERRO_PEDIDOS_FOLDER_ID=<ID carpeta Drive de pedidos>
+
+Si FIERRO_PEDIDOS_FOLDER_ID no está configurada, el servicio intenta resolver
+ARCHIVO_PEDIDO como ruta relativa desde APP_ROOT_FOLDER_ID.
+
+El servicio:
+1. Lee PEDIDOS_FIERRO por ID.
+2. Cambia ESTADO_PROCESAMIENTO a PROCESANDO.
+3. Descarga el .xls/.xlsx desde Drive.
+4. Extrae número, área, fechas, hora y líneas de material.
+5. Elimina detalle anterior del mismo pedido (permite reproceso sin duplicados).
+6. Crea las nuevas líneas en PEDIDOS_FIERRO_DETALLE.
+7. Actualiza cabecera a PROCESADO.
+8. Si falla, deja ERROR y OBSERVACION_PROCESAMIENTO.
+
+Formatos soportados: .xls y .xlsx.

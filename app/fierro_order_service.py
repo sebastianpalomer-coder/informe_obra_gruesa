@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import uuid
 from datetime import datetime
@@ -24,6 +25,8 @@ TABLE_DETALLE = os.getenv(
 KEY_PEDIDO = "ID_PEDIDO_FIERRO"
 KEY_DETALLE = "ID_DETALLE_PEDIDO"
 FILE_COLUMN = "ARCHIVO_PEDIDO"
+
+logger = logging.getLogger(__name__)
 
 
 def _now_appsheet() -> str:
@@ -84,6 +87,11 @@ def process_fierro_order(id_pedido_fierro: str) -> dict[str, Any]:
     )
 
     file_path = str(pedido.get(FILE_COLUMN) or "").strip()
+    logger.info(
+        "pedido_fierro stage=pedido_encontrado id=%s archivo=%s",
+        id_pedido_fierro,
+        file_path,
+    )
     if not file_path:
         raise RuntimeError(
             f"{TABLE_PEDIDOS}[{FILE_COLUMN}] está vacío para "
@@ -98,10 +106,26 @@ def process_fierro_order(id_pedido_fierro: str) -> dict[str, Any]:
             "OBSERVACION_PROCESAMIENTO": "",
         },
     )
+    logger.info(
+        "pedido_fierro stage=procesando id=%s",
+        id_pedido_fierro,
+    )
 
     try:
         content, _mime, filename = drive.download_fierro_order(file_path)
+        logger.info(
+            "pedido_fierro stage=archivo_descargado id=%s filename=%s bytes=%s",
+            id_pedido_fierro,
+            filename,
+            len(content),
+        )
         parsed = parse_fierro_order(content, filename)
+        logger.info(
+            "pedido_fierro stage=archivo_parseado id=%s pedido=%s lineas=%s",
+            id_pedido_fierro,
+            parsed.numero_pedido,
+            len(parsed.lineas),
+        )
 
         deleted = _delete_previous_details(
             appsheet,
@@ -143,6 +167,10 @@ def process_fierro_order(id_pedido_fierro: str) -> dict[str, Any]:
         }
 
     except Exception as exc:
+        logger.exception(
+            "pedido_fierro stage=error id=%s",
+            id_pedido_fierro,
+        )
         # El estado ERROR se intenta registrar aun cuando falle la lectura,
         # el parser o la escritura del detalle.
         try:

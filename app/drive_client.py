@@ -8,6 +8,7 @@ from datetime import date
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import Any
+from urllib.parse import parse_qs, unquote, urlparse
 
 from .alzaprimado_history import (
     AlzaprimadoSnapshot, max_created_time_utc, safe_vista_id, select_snapshot,
@@ -96,8 +97,41 @@ class DriveClient:
         return value.replace("\\", "\\\\").replace("'", "\\'")
 
     @staticmethod
-    def _basename(value: str) -> str:
-        normalized = str(value).replace("\\", "/").strip()
+    def _appsheet_file_path(value: str) -> str:
+        """Normaliza referencias File devueltas por la API de AppSheet.
+
+        AppSheet puede devolver la ruta física relativa, por ejemplo::
+
+            FACTURAS_HORMIGON/FIERRO_PEDIDOS/abc.ARCHIVO_PEDIDO.xls
+
+        o una referencia firmada del tipo::
+
+            gettablefileurl?...&fileName=FACTURAS_HORMIGON%2F...%2Fabc.xls&...
+
+        Para trabajar contra Google Drive necesitamos recuperar el parámetro
+        ``fileName`` de esa URL firmada.
+        """
+        text = str(value or "").strip()
+        if not text:
+            return ""
+
+        # urlparse también interpreta correctamente una referencia relativa
+        # como ``gettablefileurl?...`` siempre que exista el signo ``?``.
+        parsed = urlparse(text)
+        query = parse_qs(parsed.query)
+
+        for key, values in query.items():
+            if key.lower() == "filename" and values:
+                candidate = unquote(str(values[0])).strip()
+                if candidate:
+                    return candidate
+
+        return text
+
+    @classmethod
+    def _basename(cls, value: str) -> str:
+        normalized = cls._appsheet_file_path(value)
+        normalized = normalized.replace("\\", "/").strip()
         return PurePosixPath(normalized).name
 
     def _find_child(
@@ -308,12 +342,18 @@ class DriveClient:
         self,
         file_path: str,
     ) -> tuple[bytes, str, str]:
+        normalized_path = self._appsheet_file_path(file_path)
+
+        if not normalized_path:
+            raise DriveError("ARCHIVO_PEDIDO no contiene una ruta válida.")
+
         if self.fierro_pedidos_folder_id:
             return self.download_from_folder(
                 self.fierro_pedidos_folder_id,
-                file_path,
+                normalized_path,
             )
-        return self.download_path(file_path)
+
+        return self.download_path(normalized_path)
 
     @staticmethod
     def _as_data_uri(

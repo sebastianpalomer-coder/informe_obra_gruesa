@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 
 from fastapi import FastAPI, Header, HTTPException
@@ -16,10 +17,12 @@ from .report_service import (
 )
 from .fierro_order_service import process_fierro_order
 
+logger = logging.getLogger(__name__)
+
 
 app = FastAPI(
     title="Informes Obra Gruesa",
-    version="1.5.0",
+    version="1.5.1",
 )
 
 
@@ -85,7 +88,7 @@ def ping():
     return {
         "ok": True,
         "service": "informes-obra-gruesa",
-        "version": "1.5.0",
+        "version": "1.5.1",
     }
 
 
@@ -108,6 +111,10 @@ def pedido_fierro(
             payload.id_pedido_fierro
         )
     except Exception as exc:
+        logger.exception(
+            "pedido_fierro endpoint_error id=%s",
+            payload.id_pedido_fierro,
+        )
         raise HTTPException(
             status_code=500,
             detail=str(exc),

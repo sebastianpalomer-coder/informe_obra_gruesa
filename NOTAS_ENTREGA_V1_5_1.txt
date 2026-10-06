@@ -1,0 +1,7 @@
+V1.5.1 - Corrección lectura ARCHIVO_PEDIDO AppSheet
+
+- Corrige referencias File devueltas por la API de AppSheet como gettablefileurl?...&fileName=...
+- Extrae y decodifica el parámetro fileName antes de buscar el archivo en Drive.
+- Mantiene compatibilidad con rutas relativas físicas de AppSheet.
+- Agrega trazas de etapas del procesamiento de pedidos de fierro en Cloud Logging.
+- /ping devuelve 1.5.1.

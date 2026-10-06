@@ -641,7 +641,7 @@ Pruebas: `python -m unittest discover -s tests -v` (selección histórica,
 fecha local de Chile, sin fallback a estados posteriores, descarga por ID,
 resistencia y ubicaciones).
 
-## V1.5.0 - Pedidos de fierro
+## V1.5.1 - Pedidos de fierro
 
 Se incorpora procesamiento automático de las planillas `.xls` / `.xlsx`
 cargadas en `PEDIDOS_FIERRO[ARCHIVO_PEDIDO]`.
@@ -692,4 +692,4 @@ La Service Account de Cloud Run debe tener acceso de lectura a esa carpeta.
 Si la variable se deja vacía, se intenta resolver `ARCHIVO_PEDIDO` como ruta
 relativa desde `APP_ROOT_FOLDER_ID`.
 
-Después del despliegue, `GET /ping` debe devolver `version: 1.5.0`.
+Después del despliegue, `GET /ping` debe devolver `version: 1.5.1`.

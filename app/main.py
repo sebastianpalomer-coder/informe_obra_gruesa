@@ -16,13 +16,14 @@ from .report_service import (
     generate_preview,
 )
 from .fierro_order_service import process_fierro_order
+from .sample_ticket_service import process_sample_ticket
 
 logger = logging.getLogger(__name__)
 
 
 app = FastAPI(
     title="Informes Obra Gruesa",
-    version="1.5.1",
+    version="1.6.0",
 )
 
 
@@ -62,6 +63,18 @@ class FierroOrderRequest(BaseModel):
     )
 
 
+class SampleTicketRequest(BaseModel):
+    id_visita: str = Field(min_length=1)
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "id_visita": "REEMPLAZAR_POR_ID_REAL"
+            }
+        }
+    )
+
+
 def _validate_token(
     x_report_token: str | None,
 ) -> None:
@@ -88,7 +101,7 @@ def ping():
     return {
         "ok": True,
         "service": "informes-obra-gruesa",
-        "version": "1.5.1",
+        "version": "1.6.0",
     }
 
 
@@ -114,6 +127,35 @@ def pedido_fierro(
         logger.exception(
             "pedido_fierro endpoint_error id=%s",
             payload.id_pedido_fierro,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=str(exc),
+        ) from exc
+
+
+
+
+# ============================================================
+# BOLETAS DE MUESTREO DE HORMIGÓN
+# ============================================================
+
+@app.post("/procesar-boleta-muestreo")
+def procesar_boleta_muestreo(
+    payload: SampleTicketRequest,
+    x_report_token: str | None = Header(
+        default=None,
+        alias="X-Report-Token",
+    ),
+):
+    _validate_token(x_report_token)
+
+    try:
+        return process_sample_ticket(payload.id_visita)
+    except Exception as exc:
+        logger.exception(
+            "procesar_boleta_muestreo endpoint_error id=%s",
+            payload.id_visita,
         )
         raise HTTPException(
             status_code=500,

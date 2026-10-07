@@ -1,4 +1,4 @@
-# Informe Semanal de Obra Gruesa - V1.4.3 (historial de alzaprimado)
+# Informe Semanal de Obra Gruesa - V1.6.0 (boleta de muestreo QR)
 
 ## Cambios V1.2.1
 
@@ -693,3 +693,77 @@ Si la variable se deja vacía, se intenta resolver `ARCHIVO_PEDIDO` como ruta
 relativa desde `APP_ROOT_FOLDER_ID`.
 
 Después del despliegue, `GET /ping` debe devolver `version: 1.5.1`.
+
+# V1.6.0 - Boleta de muestreo desde QR
+
+Nuevo endpoint:
+
+`POST /procesar-boleta-muestreo`
+
+Body:
+
+```json
+{
+  "id_visita": "<<[ID_VISITA]>>"
+}
+```
+
+Header:
+
+`X-Report-Token` con el mismo valor de `REPORT_WEBHOOK_TOKEN`.
+
+Flujo:
+
+1. Lee `TABLA_VISITA_TOMA_MUESTRA[URL_QR_MUESTREO]`.
+2. Descarga el PDF indicado por el QR.
+3. Extrae texto nativo con `pypdf` (sin OCR en esta versión).
+4. Obtiene `MUESTRA N°` y `GUIA N°`.
+5. Archiva una copia del PDF mediante Apps Script Drive Writer.
+6. Busca la guía por `GUIAS[FOLIO]` y escribe su `ID_REGISTRO` en `ID_GUIA`.
+7. Completa `ARCHIVO_BOLETA_MUESTREO`, `N_MUESTRA_LAB` y estado.
+
+Columnas requeridas en `TABLA_VISITA_TOMA_MUESTRA`:
+
+- `URL_QR_MUESTREO`
+- `ARCHIVO_BOLETA_MUESTREO`
+- `N_MUESTRA_LAB`
+- `ESTADO_PROCESAMIENTO_BOLETA`
+- `OBSERVACION_PROCESAMIENTO_BOLETA`
+- `ID_GUIA`
+
+Estados usados:
+
+- `PENDIENTE`
+- `PROCESANDO`
+- `PROCESADO`
+- `ERROR`
+
+## Apps Script Writer V1.2.0
+
+Reemplazar el script anterior por:
+
+`apps_script/INFORME_DRIVE_WRITER_v1_2_0_MUESTREO.gs`
+
+Agregar Propiedad del script:
+
+`SAMPLE_TICKET_FOLDER_ID=<ID carpeta Drive donde se archivarán las boletas>`
+
+Conservar las propiedades existentes:
+
+- `REPORT_WRITER_TOKEN`
+- `REPORT_FOLDER_ID`
+- `DAILY_REPORT_FOLDER_ID`
+
+## Variables Cloud Run V1.6.0
+
+```text
+SAMPLE_TICKET_APPSHEET_PATH=MUESTRAS_HORMIGON/BOLETAS_MUESTREO
+SAMPLE_TICKET_MAX_BYTES=20971520
+SAMPLE_VISITS_TABLE=TABLA_VISITA_TOMA_MUESTRA
+SAMPLE_GUIDES_TABLE=GUIAS
+SAMPLE_VISIT_KEY=ID_VISITA
+SAMPLE_GUIDE_KEY=ID_REGISTRO
+SAMPLE_GUIDE_FOLIO_COLUMN=FOLIO
+```
+
+`SAMPLE_TICKET_APPSHEET_PATH` debe ser la ruta relativa que AppSheet pueda abrir desde la columna File. El ID físico de la carpeta se configura en Apps Script, no en Cloud Run.

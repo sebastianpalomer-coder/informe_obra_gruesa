@@ -1,0 +1,26 @@
+V1.6.0 - BOLETA DE MUESTREO QR
+
+Cloud Run:
+- Nuevo endpoint POST /procesar-boleta-muestreo
+- Lee TABLA_VISITA_TOMA_MUESTRA por ID_VISITA
+- Descarga el PDF desde URL_QR_MUESTREO
+- Extrae N_MUESTRA_LAB y GUIA N° con pypdf
+- Busca GUIAS[FOLIO] y completa ID_GUIA
+- Archiva PDF mediante Apps Script Writer
+- Actualiza estados PROCESANDO / PROCESADO / ERROR
+
+Apps Script:
+- Actualizar a INFORME_DRIVE_WRITER_v1_2_0_MUESTREO.gs
+- Agregar propiedad SAMPLE_TICKET_FOLDER_ID
+
+Cloud Run env:
+- SAMPLE_TICKET_APPSHEET_PATH
+- SAMPLE_TICKET_MAX_BYTES (opcional)
+- SAMPLE_VISITS_TABLE (opcional)
+- SAMPLE_GUIDES_TABLE (opcional)
+- SAMPLE_VISIT_KEY (opcional)
+- SAMPLE_GUIDE_KEY (opcional)
+- SAMPLE_GUIDE_FOLIO_COLUMN (opcional)
+
+Dependencia nueva:
+- pypdf==5.9.0

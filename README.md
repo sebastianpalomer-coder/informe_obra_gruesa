@@ -1,4 +1,4 @@
-# Informe Semanal de Obra Gruesa - V1.6.0 (boleta de muestreo QR)
+# Informe Semanal de Obra Gruesa - V1.6.1 (datos técnicos boleta de muestreo)
 
 ## Cambios V1.2.1
 
@@ -767,3 +767,38 @@ SAMPLE_GUIDE_FOLIO_COLUMN=FOLIO
 ```
 
 `SAMPLE_TICKET_APPSHEET_PATH` debe ser la ruta relativa que AppSheet pueda abrir desde la columna File. El ID físico de la carpeta se configura en Apps Script, no en Cloud Run.
+
+
+# V1.6.1 - Datos técnicos de boleta de muestreo
+
+Se mantiene el mismo endpoint `POST /procesar-boleta-muestreo` y el mismo Apps Script Writer V1.2.0.
+
+Además de `N_MUESTRA_LAB`, `ID_GUIA` y `ARCHIVO_BOLETA_MUESTREO`, el parser intenta completar automáticamente, cuando el dato existe en el PDF de Tecnhor:
+
+- `CAMION`
+- `M3_GUIA`
+- `CODIGO_PRODUCTO`
+- `GRADO_TIPO_LAB`
+- `HORA_CARGA`
+- `HORA_SALIDA_PLANTA`
+- `HORA_LLEGADA_OBRA`
+- `FECHA_VISITA`
+- `HORA_MUESTREO`
+- `TEMP_AMBIENTE`
+- `TEMP_MEZCLA`
+- `CONO_VISITA`
+- `TIPO_PROBETA`
+- `CANT_PROBETAS`
+- `EDADES_ENSAYO`
+- `COMPACTACION`
+- `CURADO_PROBETAS`
+- `M3_DESCARGADOS_MUESTREO`
+- `HORA_INICIO_DESCARGA`
+- `OPERADOR_MIXER`
+- `RESPONSABLE_OBRA`
+- `MUESTREADOR_LAB`
+- `DESCRIPCION_SECTOR` desde `COLOCADO EN`
+
+`PISO` y `ELEMENTO` no se modifican automáticamente. Los campos técnicos que no puedan extraerse se dejan sin modificar; la ausencia de un dato técnico opcional no provoca error del proceso completo.
+
+Después del despliegue, `GET /ping` debe devolver `version: 1.6.1`.

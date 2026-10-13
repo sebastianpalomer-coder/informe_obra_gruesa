@@ -1,0 +1,10 @@
+V1.6.1 - BOLETA DE MUESTREO: DATOS TECNICOS
+
+- Mantiene el flujo QR -> descarga PDF -> Drive -> vínculo con GUIAS.
+- Amplía el parser de Tecnhor para llenar los campos técnicos de TABLA_VISITA_TOMA_MUESTRA.
+- No modifica PISO ni ELEMENTO.
+- Los campos opcionales no encontrados no bloquean el procesamiento.
+- Horas se escriben como HH:MM:SS.
+- FECHA_VISITA se escribe en formato AppSheet MM/DD/YYYY.
+- No requiere cambios en Apps Script Writer V1.2.0 ni nuevas variables de entorno.
+- /ping debe informar version 1.6.1.

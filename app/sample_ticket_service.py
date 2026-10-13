@@ -64,6 +64,10 @@ def _now_appsheet() -> str:
     return now_chile.strftime("%m/%d/%Y %H:%M:%S")
 
 
+def _date_appsheet(value) -> str:
+    return value.strftime("%m/%d/%Y")
+
+
 def _clean_error(exc: Exception) -> str:
     text = str(exc).strip() or exc.__class__.__name__
     return text[:1800]
@@ -387,17 +391,53 @@ def process_sample_ticket(id_visita: str) -> dict[str, Any]:
                 f"La guía {guide_number} no tiene valor en {GUIDE_KEY}."
             )
 
-        appsheet.edit_row(
-            TABLE_VISITS,
+        update_row: dict[str, Any] = {
+            VISIT_KEY: id_visita,
+            "ID_GUIA": guide_key,
+            "ARCHIVO_BOLETA_MUESTREO": archived_path,
+            "N_MUESTRA_LAB": sample_number,
+            "ESTADO_PROCESAMIENTO_BOLETA": "PROCESADO",
+            "OBSERVACION_PROCESAMIENTO_BOLETA": "",
+        }
+
+        technical_values: dict[str, Any] = {
+            "CAMION": ticket.truck_number,
+            "M3_GUIA": ticket.guide_m3,
+            "CODIGO_PRODUCTO": ticket.product_code,
+            "GRADO_TIPO_LAB": ticket.grade_type,
+            "HORA_CARGA": ticket.load_time,
+            "HORA_SALIDA_PLANTA": ticket.plant_departure_time,
+            "HORA_LLEGADA_OBRA": ticket.site_arrival_time,
+            "FECHA_VISITA": (
+                _date_appsheet(ticket.sample_date)
+                if ticket.sample_date is not None
+                else None
+            ),
+            "HORA_MUESTREO": ticket.sample_time,
+            "TEMP_AMBIENTE": ticket.ambient_temperature,
+            "TEMP_MEZCLA": ticket.mix_temperature,
+            "CONO_VISITA": ticket.slump_cm,
+            "TIPO_PROBETA": ticket.specimen_type,
+            "CANT_PROBETAS": ticket.specimen_count,
+            "EDADES_ENSAYO": ticket.test_ages,
+            "COMPACTACION": ticket.specimen_compaction,
+            "CURADO_PROBETAS": ticket.specimen_curing,
+            "M3_DESCARGADOS_MUESTREO": ticket.discharged_m3_at_sample,
+            "HORA_INICIO_DESCARGA": ticket.discharge_start_time,
+            "OPERADOR_MIXER": ticket.mixer_operator,
+            "RESPONSABLE_OBRA": ticket.site_responsible,
+            "MUESTREADOR_LAB": ticket.lab_sampler,
+            "DESCRIPCION_SECTOR": ticket.placement,
+        }
+        update_row.update(
             {
-                VISIT_KEY: id_visita,
-                "ID_GUIA": guide_key,
-                "ARCHIVO_BOLETA_MUESTREO": archived_path,
-                "N_MUESTRA_LAB": sample_number,
-                "ESTADO_PROCESAMIENTO_BOLETA": "PROCESADO",
-                "OBSERVACION_PROCESAMIENTO_BOLETA": "",
-            },
+                column: value
+                for column, value in technical_values.items()
+                if value is not None and value != ""
+            }
         )
+
+        appsheet.edit_row(TABLE_VISITS, update_row)
 
         logger.info(
             "sample_ticket stage=procesado id=%s muestra=%s guia=%s id_guia=%s",
@@ -414,6 +454,18 @@ def process_sample_ticket(id_visita: str) -> dict[str, Any]:
             "guia": guide_number,
             "id_guia": guide_key,
             "archivo_boleta": archived_path,
+            "camion": ticket.truck_number,
+            "m3_guia": ticket.guide_m3,
+            "codigo_producto": ticket.product_code,
+            "grado_tipo_lab": ticket.grade_type,
+            "fecha_visita": (
+                ticket.sample_date.isoformat()
+                if ticket.sample_date is not None
+                else None
+            ),
+            "hora_muestreo": ticket.sample_time,
+            "cono_visita": ticket.slump_cm,
+            "descripcion_sector": ticket.placement,
         }
 
     except Exception as exc:

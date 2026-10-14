@@ -1,0 +1,22 @@
+V1.6.2 - AJUSTES PARSER BOLETA DE MUESTREO
+
+1. CAMION
+   - El parser mantiene el valor como texto, incluyendo ceros iniciales.
+   - REQUISITO APPSHEET: TABLA_VISITA_TOMA_MUESTRA[CAMION] debe ser tipo Text.
+   - Si AppSheet lo mantiene como Number, 075 se almacenará como 75 aunque Cloud Run envíe "075".
+
+2. GRADO_TIPO_LAB
+   - Se captura literalmente todo el contenido entre GRADO/TIPO y HORA DE CARGA.
+   - Corrige el comportamiento de V1.6.1 que podía conservar sólo el primer token.
+
+3. TIPO_PROBETA / CANT_PROBETAS
+   - Se flexibilizó el reconocimiento de CANT.:, CANT. : y CANT:.
+   - Ambos campos se extraen de forma conjunta para evitar desalineamientos.
+
+No se modifican:
+- POST /procesar-boleta-muestreo
+- Apps Script Writer V1.2.0
+- variables Cloud Run
+- flujo QR -> PDF -> Drive -> GUIAS -> TABLA_VISITA_TOMA_MUESTRA
+
+/ping debe informar version 1.6.2.

@@ -1,4 +1,4 @@
-# Informe Semanal de Obra Gruesa - V1.6.1 (datos técnicos boleta de muestreo)
+# Informe Semanal de Obra Gruesa - V1.6.2 (ajustes parser boleta de muestreo)
 
 ## Cambios V1.2.1
 
@@ -802,3 +802,12 @@ Además de `N_MUESTRA_LAB`, `ID_GUIA` y `ARCHIVO_BOLETA_MUESTREO`, el parser int
 `PISO` y `ELEMENTO` no se modifican automáticamente. Los campos técnicos que no puedan extraerse se dejan sin modificar; la ausencia de un dato técnico opcional no provoca error del proceso completo.
 
 Después del despliegue, `GET /ping` debe devolver `version: 1.6.1`.
+
+
+# V1.6.2 - Ajustes parser boleta de muestreo
+
+- `CAMION` se mantiene como texto desde el parser para conservar ceros iniciales. En AppSheet la columna debe ser tipo **Text**; si está como Number, AppSheet convertirá `075` en `75`.
+- `GRADO_TIPO_LAB` conserva el contenido completo ubicado entre `GRADO/TIPO` y `HORA DE CARGA`, en vez de tomar solamente el primer token.
+- `TIPO_PROBETA` y `CANT_PROBETAS` toleran variantes como `CANT.: 3`, `CANT. : 3` y `CANT: 3`.
+- No cambia el endpoint, el Apps Script Writer ni las variables de entorno.
+- Después del despliegue, `GET /ping` debe devolver `version: 1.6.2`.

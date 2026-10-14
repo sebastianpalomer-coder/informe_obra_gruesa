@@ -168,6 +168,82 @@ def _parse_spanish_date(value: str | None) -> date | None:
         return None
 
 
+
+def _extract_grade_type(text: str) -> str | None:
+    """
+    Extrae literalmente el contenido del campo GRADO/TIPO.
+
+    Tecnhor presenta GRADO/TIPO y HORA DE CARGA en la misma fila. El parser
+    anterior capturaba sólo el primer token (por ejemplo "R03"). Aquí se
+    conserva todo lo que exista entre ambas etiquetas.
+    """
+    for line in text.splitlines():
+        if not re.search(r"GRADO\s*/\s*TIPO", line, flags=re.IGNORECASE):
+            continue
+
+        match = re.search(
+            r"GRADO\s*/\s*TIPO\s*:?\s*(.*?)"
+            r"(?=\s+HORA\s+DE\s+CARGA\b|$)",
+            line,
+            flags=re.IGNORECASE,
+        )
+        if match:
+            value = _clean_text_value(match.group(1))
+            if value:
+                return value
+
+    # Respaldo para extracciones PDF donde la fila se fragmenta.
+    match = re.search(
+        r"GRADO\s*/\s*TIPO\s*:?\s*(.*?)"
+        r"(?=\s+HORA\s+DE\s+CARGA\b|\n)",
+        text,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    if match:
+        return _clean_text_value(match.group(1))
+
+    return None
+
+
+def _extract_specimen(text: str) -> tuple[str | None, int | None]:
+    """
+    Extrae PROBETA EMPLEADA y CANT. tolerando variantes de espaciado:
+    CANT.: 3, CANT. : 3, CANT: 3, etc.
+    """
+    # Primera opción: resolver en la misma línea para no invadir otros campos.
+    for line in text.splitlines():
+        if not re.search(r"PROBETA\s+EMPLEADA", line, flags=re.IGNORECASE):
+            continue
+
+        match = re.search(
+            r"PROBETA\s+EMPLEADA\s*:?\s*(.*?)"
+            r"\s+CANT\s*\.?\s*:?\s*(\d+)\b",
+            line,
+            flags=re.IGNORECASE,
+        )
+        if match:
+            return (
+                _clean_text_value(match.group(1)),
+                _integer(match.group(2)),
+            )
+
+    # Respaldo acotado para PDFs donde pypdf separa visualmente la fila.
+    match = re.search(
+        r"PROBETA\s+EMPLEADA\s*:?\s*(.*?)"
+        r"\s+CANT\s*\.?\s*:?\s*(\d+)\b",
+        text,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    if match:
+        raw_type = match.group(1)
+        # Evita capturar campos de la fila anterior si el PDF introduce saltos.
+        if "\n" in raw_type:
+            raw_type = raw_type.splitlines()[-1]
+        return _clean_text_value(raw_type), _integer(match.group(2))
+
+    return None, None
+
+
 def _extract_people(text: str) -> tuple[str | None, str | None]:
     lines = text.splitlines()
     for index, line in enumerate(lines):
@@ -254,10 +330,7 @@ def parse_sample_ticket(pdf_bytes: bytes) -> SampleTicket:
         text,
         r"C[ÓO]DIGO\s+DE\s+PRODUCTO\s+([A-Za-z0-9._/-]+)",
     )
-    grade_type = _capture(
-        text,
-        r"GRADO\s*/\s*TIPO\s+([A-Za-z0-9._/-]+)",
-    )
+    grade_type = _extract_grade_type(text)
     load_time = _normalize_time(
         _capture(text, r"HORA\s+DE\s+CARGA\s+(\d{1,2}:\d{2}(?::\d{2})?)")
     )
@@ -300,12 +373,7 @@ def parse_sample_ticket(pdf_bytes: bytes) -> SampleTicket:
     slump_cm = _decimal(
         _capture(text, r"ASENTAMIENTO\s+([0-9]+(?:[.,][0-9]+)?)")
     )
-    specimen_type = _clean_text_value(
-        _capture(text, r"PROBETA\s+EMPLEADA:\s*(.+?)\s+CANT\s*\.:", flags=re.IGNORECASE)
-    )
-    specimen_count = _integer(
-        _capture(text, r"PROBETA\s+EMPLEADA:.*?CANT\s*\.:\s*(\d+)", flags=re.IGNORECASE)
-    )
+    specimen_type, specimen_count = _extract_specimen(text)
     test_ages = _clean_text_value(
         _capture(text, r"EDADES\s+DE\s+ENSAYO\s+([0-9][0-9,.;\s]*)")
     )

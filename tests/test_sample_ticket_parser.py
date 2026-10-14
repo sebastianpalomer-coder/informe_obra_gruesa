@@ -53,3 +53,24 @@ RESPONSABLE EN OBRA                                       FIRMA                 
     assert ticket.mixer_operator == "Maikol manriquez"
     assert ticket.site_responsible == "Jonathan chavez"
     assert ticket.lab_sampler == "Cristóbal Jiménez"
+
+
+def test_parse_ticket_v162_preserves_full_grade_and_flexible_specimen_quantity(monkeypatch):
+    import app.sample_ticket_parser as module
+
+    text = """
+BOLETA DE MUESTREO DE HORMIGÓN / MORTERO
+MUESTRA N° 202342
+CAMIÓN N° 075     GUIA N° 727871     CANT.(en m3) 8
+CÓDIGO DE PRODUCTO 4842     GRADO/TIPO R03 GB30-90%-20 C/10     HORA DE CARGA 13:45
+FECHA DE MUESTREO Martes 06 de Octubre de 2026     HORA MUESTREO 14:50
+PROBETA EMPLEADA: Cilindro     CANT. : 3     *CONSISTENCIA DE MORTERO
+"""
+
+    monkeypatch.setattr(module, "extract_pdf_text", lambda _pdf: text)
+    ticket = parse_sample_ticket(b"fake")
+
+    assert ticket.truck_number == "075"
+    assert ticket.grade_type == "R03 GB30-90%-20 C/10"
+    assert ticket.specimen_type == "Cilindro"
+    assert ticket.specimen_count == 3

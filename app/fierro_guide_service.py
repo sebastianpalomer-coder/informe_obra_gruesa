@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 from .appsheet_client import AppSheetClient
 from .drive_client import DriveClient
 from .fierro_guide_parser import FierroGuide, parse_fierro_guide
+from .fierro_guide_reconciliation import reconcile_guide_orders
 
 
 TABLE_PDF = os.getenv(
@@ -275,11 +276,22 @@ def process_fierro_guide(
         existing_status = str(existing_pdf.get("ESTADO_PROCESAMIENTO") or "").upper()
         existing_guide_id = str(existing_pdf.get(GUIA_KEY) or "").strip()
         if existing_status == "PROCESADO" and existing_guide_id:
+            reconciliation = reconcile_guide_orders(
+                appsheet,
+                existing_guide_id,
+            )
+            refreshed = _find_by_key_optional(
+                appsheet, TABLE_GUIAS, GUIA_KEY, existing_guide_id
+            ) or {}
             return {
                 "ok": True,
-                "status": "already_processed",
+                "status": "already_processed_reconciled",
                 "drive_file_id": file_id,
                 "id_guia_fierro": existing_guide_id,
+                "estado_revision": str(
+                    refreshed.get("ESTADO_REVISION") or ""
+                ).strip(),
+                "conciliacion_pedidos": reconciliation.as_dict(),
             }
 
     pdf_row_created = bool(existing_pdf)
@@ -394,6 +406,13 @@ def process_fierro_guide(
             appsheet.add_rows(TABLE_DETALLE, detail_rows)
 
         linked_invoice_refs = _link_existing_invoice_refs(appsheet, guide, guide_id)
+        reconciliation = reconcile_guide_orders(appsheet, guide_id)
+        refreshed_guide = _find_by_key_optional(
+            appsheet, TABLE_GUIAS, GUIA_KEY, guide_id
+        ) or {}
+        final_review_status = str(
+            refreshed_guide.get("ESTADO_REVISION") or review_status
+        ).strip()
 
         appsheet.edit_row(
             TABLE_PDF,
@@ -412,7 +431,7 @@ def process_fierro_guide(
             guide.numero_guia,
             len(guide.items),
             project or "<sin proyecto>",
-            review_status,
+            final_review_status,
             linked_invoice_refs,
         )
 
@@ -426,7 +445,8 @@ def process_fierro_guide(
             "items": len(guide.items),
             "total_kg_despachados": _decimal_appsheet(guide.total_kg_despachados),
             "facturas_vinculadas": linked_invoice_refs,
-            "estado_revision": review_status,
+            "estado_revision": final_review_status,
+            "conciliacion_pedidos": reconciliation.as_dict(),
         }
 
     except Exception as exc:

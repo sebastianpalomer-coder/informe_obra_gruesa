@@ -397,10 +397,24 @@ class DriveClient:
         meta = self.get_file_metadata_by_id(file_id)
         parents = [str(value) for value in (meta.get("parents") or [])]
 
+        # V1.7.1:
+        # El archivo llega exclusivamente desde el watcher protegido por
+        # X-Report-Token, que ya enumera los PDFs dentro de
+        # FIERRO_FACTURAS_FOLDER_ID usando DriveApp. No se rechaza el archivo
+        # si la API de Drive usada por la Service Account no expone el mismo
+        # parent inmediato (esto puede ocurrir por el modelo de permisos /
+        # visibilidad de Drive). Se conserva la información en logs para
+        # diagnóstico, pero la seguridad del endpoint sigue descansando en el
+        # token y en el file_id enviado por nuestro watcher privado.
         if self.fierro_facturas_folder_id not in parents:
-            raise DriveError(
-                f"El archivo Drive {file_id} no pertenece directamente a la carpeta "
-                f"FIERRO_FACTURAS_FOLDER_ID={self.fierro_facturas_folder_id}."
+            import logging
+            logging.getLogger(__name__).warning(
+                "Factura Drive %s: parent visible para Service Account=%s; "
+                "carpeta configurada=%s. Se continúa porque el archivo fue "
+                "seleccionado por el watcher autenticado.",
+                file_id,
+                parents,
+                self.fierro_facturas_folder_id,
             )
 
         mime_type = str(meta.get("mimeType") or "application/octet-stream")

@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Informes Obra Gruesa",
-    version="1.6.2",
+    version="1.6.3",
 )
 
 
@@ -101,7 +101,7 @@ def ping():
     return {
         "ok": True,
         "service": "informes-obra-gruesa",
-        "version": "1.6.2",
+        "version": "1.6.3",
     }
 
 

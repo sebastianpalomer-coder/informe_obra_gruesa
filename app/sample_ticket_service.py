@@ -43,6 +43,26 @@ GUIDE_FOLIO_COLUMN = os.getenv(
     "FOLIO",
 ).strip() or "FOLIO"
 
+TABLE_RESISTANCE = os.getenv(
+    "SAMPLE_RESISTANCE_TABLE",
+    "TABLA_RESISTENCIA",
+).strip() or "TABLA_RESISTENCIA"
+
+RESISTANCE_KEY = os.getenv(
+    "SAMPLE_RESISTANCE_KEY",
+    "ID_MUESTRA",
+).strip() or "ID_MUESTRA"
+
+RESISTANCE_GUIDE_COLUMN = os.getenv(
+    "SAMPLE_RESISTANCE_GUIDE_COLUMN",
+    "ID_GUIA",
+).strip() or "ID_GUIA"
+
+RESISTANCE_VISIT_COLUMN = os.getenv(
+    "SAMPLE_RESISTANCE_VISIT_COLUMN",
+    "ID_VISITA",
+).strip() or "ID_VISITA"
+
 SAMPLE_TICKET_APPSHEET_PATH = os.getenv(
     "SAMPLE_TICKET_APPSHEET_PATH",
     "MUESTRAS_HORMIGON/BOLETAS_MUESTREO",
@@ -305,6 +325,59 @@ def _resolve_guide(
     )
 
 
+def _link_resistance_rows(
+    appsheet: AppSheetClient,
+    *,
+    guide_key: str,
+    id_visita: str,
+) -> dict[str, Any]:
+    rows = appsheet.find_rows(TABLE_RESISTANCE)
+
+    matches = [
+        row
+        for row in rows
+        if str(row.get(RESISTANCE_GUIDE_COLUMN) or "").strip() == guide_key
+    ]
+
+    linked = 0
+    already_linked = 0
+    conflicts: list[str] = []
+
+    for row in matches:
+        resistance_key = str(row.get(RESISTANCE_KEY) or "").strip()
+        if not resistance_key:
+            conflicts.append("registro_sin_clave")
+            continue
+
+        current_visit = str(row.get(RESISTANCE_VISIT_COLUMN) or "").strip()
+
+        if not current_visit:
+            appsheet.edit_row(
+                TABLE_RESISTANCE,
+                {
+                    RESISTANCE_KEY: resistance_key,
+                    RESISTANCE_VISIT_COLUMN: id_visita,
+                },
+            )
+            linked += 1
+            continue
+
+        if current_visit == id_visita:
+            already_linked += 1
+            continue
+
+        conflicts.append(
+            f"{resistance_key}: ID_VISITA={current_visit}"
+        )
+
+    return {
+        "matches": len(matches),
+        "linked": linked,
+        "already_linked": already_linked,
+        "conflicts": conflicts,
+    }
+
+
 def _archive_ticket(
     writer: ReportWriterClient,
     pdf_bytes: bytes,
@@ -391,13 +464,58 @@ def process_sample_ticket(id_visita: str) -> dict[str, Any]:
                 f"La guía {guide_number} no tiene valor en {GUIDE_KEY}."
             )
 
+        resistance_link: dict[str, Any] = {
+            "matches": 0,
+            "linked": 0,
+            "already_linked": 0,
+            "conflicts": [],
+        }
+        processing_warning = ""
+
+        try:
+            resistance_link = _link_resistance_rows(
+                appsheet,
+                guide_key=guide_key,
+                id_visita=id_visita,
+            )
+
+            if resistance_link["conflicts"]:
+                processing_warning = (
+                    "Boleta procesada. No se sobrescribió ID_VISITA en "
+                    f"{TABLE_RESISTANCE} porque se detectó un vínculo distinto: "
+                    + "; ".join(resistance_link["conflicts"])
+                )[:1800]
+
+            logger.info(
+                "sample_ticket stage=resistencia_vinculada id=%s id_guia=%s "
+                "coincidencias=%s vinculadas=%s ya_vinculadas=%s conflictos=%s",
+                id_visita,
+                guide_key,
+                resistance_link["matches"],
+                resistance_link["linked"],
+                resistance_link["already_linked"],
+                len(resistance_link["conflicts"]),
+            )
+
+        except Exception as exc:
+            processing_warning = (
+                "Boleta procesada, pero no fue posible actualizar "
+                f"{TABLE_RESISTANCE}[{RESISTANCE_VISIT_COLUMN}]: "
+                f"{_clean_error(exc)}"
+            )[:1800]
+            logger.exception(
+                "sample_ticket stage=resistencia_vinculo_error id=%s id_guia=%s",
+                id_visita,
+                guide_key,
+            )
+
         update_row: dict[str, Any] = {
             VISIT_KEY: id_visita,
             "ID_GUIA": guide_key,
             "ARCHIVO_BOLETA_MUESTREO": archived_path,
             "N_MUESTRA_LAB": sample_number,
             "ESTADO_PROCESAMIENTO_BOLETA": "PROCESADO",
-            "OBSERVACION_PROCESAMIENTO_BOLETA": "",
+            "OBSERVACION_PROCESAMIENTO_BOLETA": processing_warning,
         }
 
         technical_values: dict[str, Any] = {
@@ -466,6 +584,8 @@ def process_sample_ticket(id_visita: str) -> dict[str, Any]:
             "hora_muestreo": ticket.sample_time,
             "cono_visita": ticket.slump_cm,
             "descripcion_sector": ticket.placement,
+            "resistencia": resistance_link,
+            "advertencia": processing_warning or None,
         }
 
     except Exception as exc:

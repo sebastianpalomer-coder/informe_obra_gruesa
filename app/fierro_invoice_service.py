@@ -36,6 +36,11 @@ TABLE_GUIAS = os.getenv(
     "FIERRO_FACTURAS_GUIAS",
 ).strip() or "FIERRO_FACTURAS_GUIAS"
 
+TABLE_FIERRO_GUIAS = os.getenv(
+    "FIERRO_GUIAS_TABLE",
+    "FIERRO_GUIAS",
+).strip() or "FIERRO_GUIAS"
+
 PDF_KEY = "ID_ARCHIVO"
 FACTURA_KEY = "ID_FACTURA_FIERRO"
 DETALLE_KEY = "ID_DETALLE_FACTURA"
@@ -209,6 +214,26 @@ def _find_by_key_optional(
         key_rows=[{key_name: key_value}],
     )
     return rows[0] if rows else None
+
+
+def _find_existing_guide_id(
+    appsheet: AppSheetClient,
+    invoice: FierroInvoice,
+    guide_number: str,
+) -> str:
+    matches: list[dict[str, Any]] = []
+    for row in appsheet.find_rows(TABLE_FIERRO_GUIAS):
+        if str(row.get("N_GUIA") or "").strip() != str(guide_number).strip():
+            continue
+        if _digits(row.get("RUT_EMISOR")) and (
+            _digits(row.get("RUT_EMISOR")) != _digits(invoice.rut_emisor)
+        ):
+            continue
+        matches.append(row)
+
+    if len(matches) != 1:
+        return ""
+    return str(matches[0].get("ID_GUIA_FIERRO") or "").strip()
 
 
 def _delete_children(
@@ -402,19 +427,25 @@ def process_fierro_invoice(
 
         guide_rows: list[dict[str, Any]] = []
         for ref in invoice.guias:
-            guide_rows.append(
-                {
-                    GUIA_KEY: _stable_id(
-                        "FFG_",
-                        invoice_id,
-                        ref.numero,
-                        _date_appsheet(ref.fecha),
-                    ),
-                    FACTURA_KEY: invoice_id,
-                    "N_GUIA": int(ref.numero),
-                    "FECHA_GUIA": _date_appsheet(ref.fecha),
-                }
+            linked_guide_id = _find_existing_guide_id(
+                appsheet,
+                invoice,
+                ref.numero,
             )
+            row = {
+                GUIA_KEY: _stable_id(
+                    "FFG_",
+                    invoice_id,
+                    ref.numero,
+                    _date_appsheet(ref.fecha),
+                ),
+                FACTURA_KEY: invoice_id,
+                "N_GUIA": int(ref.numero),
+                "FECHA_GUIA": _date_appsheet(ref.fecha),
+            }
+            if linked_guide_id:
+                row["ID_GUIA_FIERRO"] = linked_guide_id
+            guide_rows.append(row)
 
         if guide_rows:
             appsheet.add_rows(TABLE_GUIAS, guide_rows)

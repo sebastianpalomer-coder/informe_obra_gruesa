@@ -70,6 +70,11 @@ class DriveClient:
             "",
         ).strip()
 
+        self.fierro_guias_folder_id = os.getenv(
+            "FIERRO_GUIAS_FOLDER_ID",
+            "",
+        ).strip()
+
         # Ruta relativa que se escribirá en INFORME[ARCHIVO_INFORME].
         # Debe coincidir con la ubicación que AppSheet reconoce
         # respecto de la carpeta del archivo fuente.
@@ -442,6 +447,56 @@ class DriveClient:
             str(meta.get("name") or "factura.pdf"),
             meta,
         )
+
+    def download_fierro_guide_by_id(
+        self,
+        file_id: str,
+    ) -> tuple[bytes, str, str, dict[str, Any]]:
+        if not self.fierro_guias_folder_id:
+            raise DriveError(
+                "Falta FIERRO_GUIAS_FOLDER_ID en Cloud Run."
+            )
+
+        meta = self.get_file_metadata_by_id(file_id)
+        parents = [str(value) for value in (meta.get("parents") or [])]
+
+        if self.fierro_guias_folder_id not in parents:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Guía Drive %s: parent visible para Service Account=%s; "
+                "carpeta configurada=%s. Se continúa porque el archivo fue "
+                "seleccionado por el watcher autenticado.",
+                file_id,
+                parents,
+                self.fierro_guias_folder_id,
+            )
+
+        mime_type = str(meta.get("mimeType") or "application/octet-stream")
+        if mime_type == FOLDER_MIME:
+            raise DriveError("El ID recibido corresponde a una carpeta, no a un archivo.")
+
+        try:
+            request = self.service.files().get_media(
+                fileId=file_id,
+                supportsAllDrives=True,
+            )
+            buffer = io.BytesIO()
+            downloader = MediaIoBaseDownload(buffer, request)
+            done = False
+            while not done:
+                _, done = downloader.next_chunk()
+        except Exception as exc:
+            raise DriveError(
+                f"No fue posible descargar la guía Drive {file_id}: {exc}"
+            ) from exc
+
+        return (
+            buffer.getvalue(),
+            mime_type,
+            str(meta.get("name") or "guia.pdf"),
+            meta,
+        )
+
 
     @staticmethod
     def _as_data_uri(

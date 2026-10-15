@@ -62,6 +62,14 @@ class DriveClient:
             "",
         ).strip()
 
+        # Carpeta dedicada a las facturas de fierro que el administrativo
+        # carga directamente en Drive. El endpoint /factura-fierro sólo
+        # permite descargar archivos cuyo padre inmediato sea esta carpeta.
+        self.fierro_facturas_folder_id = os.getenv(
+            "FIERRO_FACTURAS_FOLDER_ID",
+            "",
+        ).strip()
+
         # Ruta relativa que se escribirá en INFORME[ARCHIVO_INFORME].
         # Debe coincidir con la ubicación que AppSheet reconoce
         # respecto de la carpeta del archivo fuente.
@@ -354,6 +362,72 @@ class DriveClient:
             )
 
         return self.download_path(normalized_path)
+
+    def get_file_metadata_by_id(
+        self,
+        file_id: str,
+    ) -> dict[str, Any]:
+        file_id = str(file_id or "").strip()
+        if not file_id:
+            raise DriveError("ID de archivo Drive vacío.")
+
+        try:
+            return self.service.files().get(
+                fileId=file_id,
+                fields=(
+                    "id,name,mimeType,createdTime,modifiedTime,"
+                    "webViewLink,parents,size"
+                ),
+                supportsAllDrives=True,
+            ).execute()
+        except Exception as exc:
+            raise DriveError(
+                f"No fue posible obtener metadata del archivo Drive {file_id}: {exc}"
+            ) from exc
+
+    def download_fierro_invoice_by_id(
+        self,
+        file_id: str,
+    ) -> tuple[bytes, str, str, dict[str, Any]]:
+        if not self.fierro_facturas_folder_id:
+            raise DriveError(
+                "Falta FIERRO_FACTURAS_FOLDER_ID en Cloud Run."
+            )
+
+        meta = self.get_file_metadata_by_id(file_id)
+        parents = [str(value) for value in (meta.get("parents") or [])]
+
+        if self.fierro_facturas_folder_id not in parents:
+            raise DriveError(
+                f"El archivo Drive {file_id} no pertenece directamente a la carpeta "
+                f"FIERRO_FACTURAS_FOLDER_ID={self.fierro_facturas_folder_id}."
+            )
+
+        mime_type = str(meta.get("mimeType") or "application/octet-stream")
+        if mime_type == FOLDER_MIME:
+            raise DriveError("El ID recibido corresponde a una carpeta, no a un archivo.")
+
+        try:
+            request = self.service.files().get_media(
+                fileId=file_id,
+                supportsAllDrives=True,
+            )
+            buffer = io.BytesIO()
+            downloader = MediaIoBaseDownload(buffer, request)
+            done = False
+            while not done:
+                _, done = downloader.next_chunk()
+        except Exception as exc:
+            raise DriveError(
+                f"No fue posible descargar la factura Drive {file_id}: {exc}"
+            ) from exc
+
+        return (
+            buffer.getvalue(),
+            mime_type,
+            str(meta.get("name") or "factura.pdf"),
+            meta,
+        )
 
     @staticmethod
     def _as_data_uri(

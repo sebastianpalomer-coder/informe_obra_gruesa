@@ -17,13 +17,14 @@ from .report_service import (
 )
 from .fierro_order_service import process_fierro_order
 from .sample_ticket_service import process_sample_ticket
+from .fierro_invoice_service import process_fierro_invoice
 
 logger = logging.getLogger(__name__)
 
 
 app = FastAPI(
     title="Informes Obra Gruesa",
-    version="1.6.3",
+    version="1.7.0",
 )
 
 
@@ -75,6 +76,20 @@ class SampleTicketRequest(BaseModel):
     )
 
 
+class FierroInvoiceRequest(BaseModel):
+    drive_file_id: str = Field(min_length=1)
+    nombre_archivo: str = ""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "drive_file_id": "ID_ARCHIVO_DRIVE",
+                "nombre_archivo": "26517.pdf",
+            }
+        }
+    )
+
+
 def _validate_token(
     x_report_token: str | None,
 ) -> None:
@@ -101,7 +116,7 @@ def ping():
     return {
         "ok": True,
         "service": "informes-obra-gruesa",
-        "version": "1.6.3",
+        "version": "1.7.0",
     }
 
 
@@ -134,6 +149,36 @@ def pedido_fierro(
         ) from exc
 
 
+
+
+# ============================================================
+# FACTURAS DE FIERRO
+# ============================================================
+
+@app.post("/factura-fierro")
+def factura_fierro(
+    payload: FierroInvoiceRequest,
+    x_report_token: str | None = Header(
+        default=None,
+        alias="X-Report-Token",
+    ),
+):
+    _validate_token(x_report_token)
+
+    try:
+        return process_fierro_invoice(
+            payload.drive_file_id,
+            payload.nombre_archivo,
+        )
+    except Exception as exc:
+        logger.exception(
+            "factura_fierro endpoint_error file=%s",
+            payload.drive_file_id,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=str(exc),
+        ) from exc
 
 
 # ============================================================

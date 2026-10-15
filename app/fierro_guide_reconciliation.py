@@ -40,7 +40,29 @@ ASIGNACION_KEY = "ID_GUIA_PEDIDO"
 
 AUTO = "AUTOMATICA"
 MANUAL = "MANUAL"
-TOLERANCE = Decimal("0.01")
+EPSILON_KG = Decimal("0.01")
+
+
+def _read_weight_tolerance_pct() -> Decimal:
+    """Porcentaje de tolerancia de peso, expresado como puntos porcentuales.
+
+    Ejemplo: FIERRO_GUIAS_PEDIDOS_TOLERANCIA_PCT=1 significa 1 %.
+    """
+    raw = os.getenv("FIERRO_GUIAS_PEDIDOS_TOLERANCIA_PCT", "1").strip() or "1"
+    try:
+        value = Decimal(raw.replace(",", "."))
+    except InvalidOperation:
+        value = Decimal("1")
+    if value < 0:
+        value = Decimal("0")
+    return value
+
+
+WEIGHT_TOLERANCE_PCT = _read_weight_tolerance_pct()
+
+
+def _weight_tolerance_kg(requested_kg: Decimal) -> Decimal:
+    return abs(requested_kg) * WEIGHT_TOLERANCE_PCT / Decimal("100")
 
 
 @dataclass(frozen=True)
@@ -62,6 +84,7 @@ class ReconciliationResult:
             "kg_sin_asignar": float(self.kg_unassigned),
             "detalles_con_saldo": self.details_with_balance,
             "advertencias": list(self.warnings),
+            "tolerancia_peso_pct": float(WEIGHT_TOLERANCE_PCT),
         }
 
 
@@ -170,13 +193,13 @@ def _apply_review(
 
     if current_status in structural_statuses:
         status = current_status
-    elif result.kg_unassigned > TOLERANCE or result.warnings:
+    elif result.kg_unassigned > EPSILON_KG or result.warnings:
         status = "REVISAR_PEDIDO"
     else:
         # La guía queda pendiente hasta la conciliación con factura.
         status = "PENDIENTE"
 
-    if result.kg_unassigned > TOLERANCE:
+    if result.kg_unassigned > EPSILON_KG:
         reconciliation_note = (
             f"[Conciliación pedidos] Asignación automática parcial: "
             f"{result.kg_unassigned.normalize()} kg de guía sin pedido compatible. "
@@ -189,8 +212,9 @@ def _apply_review(
     else:
         reconciliation_note = (
             "[Conciliación pedidos] Material de guía conciliado con pedidos por "
-            "proyecto, diámetro y largo. Se priorizó el pedido vigente más reciente "
-            "anterior a la guía. Pendiente conciliación con factura."
+            "proyecto, diámetro y largo, aplicando tolerancia de peso. Se priorizó "
+            "el pedido vigente más reciente anterior a la guía. Pendiente "
+            "conciliación con factura."
         )
 
     base = _strip_previous_note(guide.get("OBSERVACION_REVISION"))
@@ -289,27 +313,94 @@ def reconcile_guide_orders(
     kg_unassigned = Decimal("0")
     details_with_balance = 0
 
-    # Ordenamos para obtener resultados deterministas.
+    # Ordenamos y agrupamos por material para que varias hornadas de un mismo
+    # diámetro/largo se concilien como un único despacho. Esto evita que pequeñas
+    # diferencias de romana se derramen artificialmente a pedidos anteriores.
     guide_details.sort(key=lambda row: str(row.get(GUIA_DETALLE_KEY) or ""))
+
+    groups: dict[tuple[Decimal, Decimal], list[dict[str, Any]]] = {}
+    remaining_by_guide_detail: dict[str, Decimal] = {}
 
     for guide_detail in guide_details:
         guide_detail_id = str(guide_detail.get(GUIA_DETALLE_KEY) or "").strip()
         guide_kg = _to_decimal(guide_detail.get("KG_DESPACHADOS"))
         manual_kg = manual_by_guide_detail.get(guide_detail_id, Decimal("0"))
-        remaining_guide = guide_kg - manual_kg
+        remaining = guide_kg - manual_kg
 
-        if remaining_guide < -TOLERANCE:
+        if remaining < -EPSILON_KG:
             warnings.append(
                 f"Detalle {guide_detail_id}: asignación manual {manual_kg} kg "
                 f"supera los {guide_kg} kg despachados."
             )
-            remaining_guide = Decimal("0")
-        elif remaining_guide <= TOLERANCE:
+            remaining = Decimal("0")
+        elif remaining <= EPSILON_KG:
+            remaining = Decimal("0")
+
+        remaining_by_guide_detail[guide_detail_id] = remaining
+        material_key = (
+            _to_decimal(guide_detail.get("DIAMETRO_MM")),
+            _to_decimal(guide_detail.get("LARGO_M")),
+        )
+        groups.setdefault(material_key, []).append(guide_detail)
+
+    def add_auto_assignment(
+        guide_detail: dict[str, Any],
+        order: dict[str, Any],
+        order_detail: dict[str, Any],
+        assigned: Decimal,
+    ) -> None:
+        nonlocal kg_auto
+        if assigned <= EPSILON_KG:
+            return
+
+        guide_detail_id = str(guide_detail.get(GUIA_DETALLE_KEY) or "").strip()
+        order_id = str(order.get(PEDIDO_KEY) or "").strip()
+        order_detail_id = str(order_detail.get(PEDIDO_DETALLE_KEY) or "").strip()
+        assignment_id = _stable_id(
+            "FGP_",
+            guide_id,
+            guide_detail_id,
+            order_detail_id,
+            AUTO,
+        )
+        new_rows.append(
+            {
+                ASIGNACION_KEY: assignment_id,
+                GUIA_KEY: guide_id,
+                PEDIDO_KEY: order_id,
+                GUIA_DETALLE_KEY: guide_detail_id,
+                PEDIDO_DETALLE_KEY: order_detail_id,
+                "KG_ASIGNADOS": float(assigned),
+                "TIPO_ASIGNACION": AUTO,
+                "OBSERVACION": (
+                    "Asignación automática por coincidencia exacta de proyecto, "
+                    "diámetro y largo; prioridad al pedido más reciente anterior "
+                    f"a la guía; tolerancia de peso {WEIGHT_TOLERANCE_PCT.normalize()}%."
+                ),
+            }
+        )
+        kg_auto += assigned
+        linked_order_ids.add(order_id)
+
+    for _material_key, material_details in sorted(
+        groups.items(), key=lambda item: (item[0][0], item[0][1])
+    ):
+        representative = material_details[0]
+        group_remaining = sum(
+            (
+                remaining_by_guide_detail.get(
+                    str(row.get(GUIA_DETALLE_KEY) or "").strip(), Decimal("0")
+                )
+                for row in material_details
+            ),
+            Decimal("0"),
+        )
+        if group_remaining <= EPSILON_KG:
             continue
 
         candidates: list[tuple[date, date, int, str, dict[str, Any], dict[str, Any]]] = []
         for order_detail in order_details:
-            if not _same_material(guide_detail, order_detail):
+            if not _same_material(representative, order_detail):
                 continue
 
             order_id = str(order_detail.get(PEDIDO_KEY) or "").strip()
@@ -335,10 +426,13 @@ def reconcile_guide_orders(
             requested = _to_decimal(order_detail.get("KG_SOLICITADOS"))
             already = assigned_to_order_detail.get(order_detail_id, Decimal("0"))
             pending = requested - already
-            if pending <= TOLERANCE:
+            tolerance_kg = _weight_tolerance_kg(requested)
+
+            # Un saldo residual dentro de la tolerancia se considera conciliado y no
+            # debe capturar material de una guía posterior.
+            if pending <= max(EPSILON_KG, tolerance_kg):
                 continue
 
-            # Más reciente primero: fecha requerida, fecha pedido, N_PEDIDO.
             candidates.append(
                 (
                     effective_date,
@@ -353,50 +447,51 @@ def reconcile_guide_orders(
         candidates.sort(key=lambda item: (item[0], item[1], item[2], item[3]), reverse=True)
 
         for _effective, _order_date, _number, order_detail_id, order, order_detail in candidates:
-            if remaining_guide <= TOLERANCE:
+            if group_remaining <= EPSILON_KG:
                 break
 
             requested = _to_decimal(order_detail.get("KG_SOLICITADOS"))
             already = assigned_to_order_detail.get(order_detail_id, Decimal("0"))
             pending = requested - already
-            if pending <= TOLERANCE:
+            tolerance_kg = _weight_tolerance_kg(requested)
+            if pending <= max(EPSILON_KG, tolerance_kg):
                 continue
 
-            assigned = min(remaining_guide, pending)
-            if assigned <= TOLERANCE:
-                continue
+            if group_remaining > pending:
+                excess = group_remaining - pending
+                if excess <= tolerance_kg:
+                    # El despacho supera levemente el peso teórico pedido. Se asigna
+                    # completo al mismo pedido y la pequeña diferencia queda visible
+                    # como variación de peso, sin derramarla a un pedido anterior.
+                    amount_for_order = group_remaining
+                else:
+                    amount_for_order = pending
+            else:
+                amount_for_order = group_remaining
 
-            order_id = str(order.get(PEDIDO_KEY) or "").strip()
-            assignment_id = _stable_id(
-                "FGP_",
-                guide_id,
-                guide_detail_id,
-                order_detail_id,
-                AUTO,
-            )
-            new_rows.append(
-                {
-                    ASIGNACION_KEY: assignment_id,
-                    GUIA_KEY: guide_id,
-                    PEDIDO_KEY: order_id,
-                    GUIA_DETALLE_KEY: guide_detail_id,
-                    PEDIDO_DETALLE_KEY: order_detail_id,
-                    "KG_ASIGNADOS": float(assigned),
-                    "TIPO_ASIGNACION": AUTO,
-                    "OBSERVACION": (
-                        "Asignación automática por coincidencia exacta de proyecto, "
-                        "diámetro y largo; prioridad al pedido más reciente anterior "
-                        "a la guía."
-                    ),
-                }
-            )
-            assigned_to_order_detail[order_detail_id] = already + assigned
-            remaining_guide -= assigned
-            kg_auto += assigned
-            linked_order_ids.add(order_id)
+            amount_left = amount_for_order
+            for guide_detail in material_details:
+                if amount_left <= EPSILON_KG:
+                    break
+                guide_detail_id = str(guide_detail.get(GUIA_DETALLE_KEY) or "").strip()
+                available = remaining_by_guide_detail.get(guide_detail_id, Decimal("0"))
+                if available <= EPSILON_KG:
+                    continue
 
-        if remaining_guide > TOLERANCE:
-            kg_unassigned += remaining_guide
+                assigned = min(available, amount_left)
+                add_auto_assignment(guide_detail, order, order_detail, assigned)
+                remaining_by_guide_detail[guide_detail_id] = available - assigned
+                amount_left -= assigned
+
+            actually_assigned = amount_for_order - amount_left
+            assigned_to_order_detail[order_detail_id] = already + actually_assigned
+            group_remaining -= actually_assigned
+
+    for guide_detail in guide_details:
+        guide_detail_id = str(guide_detail.get(GUIA_DETALLE_KEY) or "").strip()
+        balance = remaining_by_guide_detail.get(guide_detail_id, Decimal("0"))
+        if balance > EPSILON_KG:
+            kg_unassigned += balance
             details_with_balance += 1
 
     # Sólo después de calcular el nuevo reparto eliminamos el cálculo automático anterior.

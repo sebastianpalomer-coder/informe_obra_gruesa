@@ -59,7 +59,7 @@ def _now_appsheet() -> str:
 
 
 def _date_appsheet(value) -> str:
-    return value.strftime("%m/%d/%Y") if value else ""
+    return value.strftime("%Y-%m-%d") if value else ""
 
 
 def _datetime_appsheet(value: str | None) -> str:

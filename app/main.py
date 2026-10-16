@@ -18,14 +18,17 @@ from .report_service import (
 from .fierro_order_service import process_fierro_order
 from .sample_ticket_service import process_sample_ticket
 from .fierro_invoice_service import process_fierro_invoice
-from .fierro_guide_service import process_fierro_guide
+from .fierro_guide_service import (
+    process_fierro_guide,
+    reconcile_existing_fierro_guide,
+)
 
 logger = logging.getLogger(__name__)
 
 
 app = FastAPI(
     title="Informes Obra Gruesa",
-    version="1.8.4",
+    version="1.8.5",
 )
 
 
@@ -100,6 +103,18 @@ class FierroGuideRequest(BaseModel):
             "example": {
                 "drive_file_id": "ID_ARCHIVO_DRIVE",
                 "nombre_archivo": "Guía de Salida Electrónica24514.pdf",
+            }
+        }
+    )
+
+
+class FierroGuideReconcileRequest(BaseModel):
+    id_guia_fierro: str = Field(min_length=1)
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "id_guia_fierro": "FG_1530ad5550309612"
             }
         }
     )
@@ -219,6 +234,31 @@ def guia_fierro(
         logger.exception(
             "guia_fierro endpoint_error file=%s",
             payload.drive_file_id,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=str(exc),
+        ) from exc
+
+
+@app.post("/reconciliar-guia-fierro")
+def reconciliar_guia_fierro(
+    payload: FierroGuideReconcileRequest,
+    x_report_token: str | None = Header(
+        default=None,
+        alias="X-Report-Token",
+    ),
+):
+    _validate_token(x_report_token)
+
+    try:
+        return reconcile_existing_fierro_guide(
+            payload.id_guia_fierro
+        )
+    except Exception as exc:
+        logger.exception(
+            "reconciliar_guia_fierro endpoint_error id=%s",
+            payload.id_guia_fierro,
         )
         raise HTTPException(
             status_code=500,

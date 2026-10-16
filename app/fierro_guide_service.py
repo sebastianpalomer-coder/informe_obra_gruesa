@@ -480,3 +480,81 @@ def process_fierro_guide(
             except Exception:
                 logger.exception("guia_fierro unable_to_store_error file=%s", file_id)
         raise
+
+
+def reconcile_existing_fierro_guide(guide_id: str) -> dict[str, Any]:
+    """Reconciles an already stored guide without requiring a Drive PDF.
+
+    Intended for guides entered manually in FIERRO_GUIAS / FIERRO_GUIAS_DETALLE.
+    It runs the same order and invoice reconciliation routines used after normal
+    PDF processing, but it does not parse, create, replace or require a PDF row.
+    """
+    guide_id = str(guide_id or "").strip()
+    if not guide_id:
+        raise FierroGuideServiceError("id_guia_fierro está vacío.")
+
+    appsheet = AppSheetClient()
+
+    guide = _find_by_key_optional(
+        appsheet,
+        TABLE_GUIAS,
+        GUIA_KEY,
+        guide_id,
+    )
+    if not guide:
+        raise FierroGuideServiceError(
+            f"No se encontró {TABLE_GUIAS}[{GUIA_KEY}]={guide_id!r}."
+        )
+
+    detail_rows = [
+        row
+        for row in appsheet.find_rows(TABLE_DETALLE)
+        if str(row.get(GUIA_KEY) or "").strip() == guide_id
+    ]
+    if not detail_rows:
+        raise FierroGuideServiceError(
+            f"La guía {guide_id} no tiene líneas en {TABLE_DETALLE}."
+        )
+
+    reconciliation = reconcile_guide_orders(
+        appsheet,
+        guide_id,
+    )
+    invoice_reconciliations = reconcile_invoices_for_guide(
+        appsheet,
+        guide_id,
+    )
+
+    refreshed = _find_by_key_optional(
+        appsheet,
+        TABLE_GUIAS,
+        GUIA_KEY,
+        guide_id,
+    ) or guide
+
+    final_review_status = str(
+        refreshed.get("ESTADO_REVISION") or ""
+    ).strip()
+
+    logger.info(
+        "guia_fierro manual_reconciliation guide_id=%s guide=%s status=%s invoices=%s",
+        guide_id,
+        str(refreshed.get("N_GUIA") or "").strip(),
+        final_review_status,
+        len(invoice_reconciliations),
+    )
+
+    return {
+        "ok": True,
+        "status": "reconciled_existing_guide",
+        "id_guia_fierro": guide_id,
+        "numero_guia": refreshed.get("N_GUIA"),
+        "proyecto": str(refreshed.get("PROYECTO") or "").strip(),
+        "lineas_guia": len(detail_rows),
+        "estado_revision": final_review_status,
+        "conciliacion_pedidos": reconciliation.as_dict(),
+        "conciliacion_facturas": [
+            result.as_dict() for result in invoice_reconciliations
+        ],
+    }
+

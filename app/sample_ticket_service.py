@@ -545,6 +545,7 @@ def process_sample_ticket(id_visita: str) -> dict[str, Any]:
             "OPERADOR_MIXER": ticket.mixer_operator,
             "RESPONSABLE_OBRA": ticket.site_responsible,
             "MUESTREADOR_LAB": ticket.lab_sampler,
+            "NOMBRE_LABORATORIO": ticket.laboratory_name,
             "DESCRIPCION_SECTOR": ticket.placement,
         }
         update_row.update(
@@ -584,6 +585,7 @@ def process_sample_ticket(id_visita: str) -> dict[str, Any]:
             "hora_muestreo": ticket.sample_time,
             "cono_visita": ticket.slump_cm,
             "descripcion_sector": ticket.placement,
+            "nombre_laboratorio": ticket.laboratory_name,
             "resistencia": resistance_link,
             "advertencia": processing_warning or None,
         }

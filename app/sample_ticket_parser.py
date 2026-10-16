@@ -41,6 +41,7 @@ class SampleTicket:
     mixer_operator: str | None = None
     site_responsible: str | None = None
     lab_sampler: str | None = None
+    laboratory_name: str | None = None
 
 
 _SAMPLE_PATTERNS = (
@@ -244,6 +245,51 @@ def _extract_specimen(text: str) -> tuple[str | None, int | None]:
     return None, None
 
 
+
+def _extract_laboratory_name(text: str) -> str | None:
+    """
+    Extrae el nombre del laboratorio desde marcas visibles de la boleta.
+
+    Prioriza la etiqueta del muestreador (por ejemplo ``MUEST. TECNHOR``).
+    Como respaldo usa el dominio web o de correo del pie de página.
+    """
+    # Etiqueta explícita en observaciones o firma: MUEST. TECNHOR [Sí]
+    for line in text.splitlines():
+        if not re.search(r"\bMUEST\.", line, flags=re.IGNORECASE):
+            continue
+
+        match = re.search(
+            r"\bMUEST\.\s*"
+            r"([A-Za-zÁÉÍÓÚÑáéíóúñ0-9&._-]+(?:\s+[A-Za-zÁÉÍÓÚÑáéíóúñ0-9&._-]+){0,3}?)"
+            r"(?=\s{2,}|\s+(?:S[IÍ]|NO)\b|$)",
+            line,
+            flags=re.IGNORECASE,
+        )
+        if match:
+            value = _clean_text_value(match.group(1))
+            if value and value.upper() not in {"SI", "SÍ", "NO"}:
+                return value.upper()
+
+    # Respaldo por sitio web del laboratorio.
+    web = re.search(
+        r"\bwww\.([a-z0-9-]+)\.(?:cl|com|net|org)\b",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if web:
+        return web.group(1).upper()
+
+    # Respaldo por dominio de correo.
+    email = re.search(
+        r"@[a-z0-9._%+-]*?([a-z0-9-]+)\.(?:cl|com|net|org)\b",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if email:
+        return email.group(1).upper()
+
+    return None
+
 def _extract_people(text: str) -> tuple[str | None, str | None]:
     lines = text.splitlines()
     for index, line in enumerate(lines):
@@ -407,6 +453,7 @@ def parse_sample_ticket(pdf_bytes: bytes) -> SampleTicket:
         _capture(text, r"OPERADOR\s+MIXER\s*\(nombre\)\s*([^\n]+)")
     )
     site_responsible, lab_sampler = _extract_people(text)
+    laboratory_name = _extract_laboratory_name(text)
 
     return SampleTicket(
         sample_number=sample_number,
@@ -435,4 +482,5 @@ def parse_sample_ticket(pdf_bytes: bytes) -> SampleTicket:
         mixer_operator=mixer_operator,
         site_responsible=site_responsible,
         lab_sampler=lab_sampler,
+        laboratory_name=laboratory_name,
     )

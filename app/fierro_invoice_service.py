@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 from .appsheet_client import AppSheetClient
 from .drive_client import DriveClient
 from .fierro_invoice_parser import FierroInvoice, parse_fierro_invoice
+from .fierro_invoice_guide_reconciliation import reconcile_invoice_guides
 
 
 TABLE_PDF = os.getenv(
@@ -297,11 +298,17 @@ def process_fierro_invoice(
         existing_status = str(existing_pdf.get("ESTADO_PROCESAMIENTO") or "").upper()
         existing_invoice_id = str(existing_pdf.get(FACTURA_KEY) or "").strip()
         if existing_status == "PROCESADO" and existing_invoice_id:
+            reconciliation = reconcile_invoice_guides(
+                appsheet,
+                existing_invoice_id,
+            )
             return {
                 "ok": True,
-                "status": "already_processed",
+                "status": "already_processed_reconciled",
                 "drive_file_id": file_id,
                 "id_factura_fierro": existing_invoice_id,
+                "estado_revision": reconciliation.status,
+                "conciliacion_guias": reconciliation.as_dict(),
             }
 
     pdf_row_created = bool(existing_pdf)
@@ -450,6 +457,12 @@ def process_fierro_invoice(
         if guide_rows:
             appsheet.add_rows(TABLE_GUIAS, guide_rows)
 
+        reconciliation = reconcile_invoice_guides(
+            appsheet,
+            invoice_id,
+        )
+        final_review_status = reconciliation.status
+
         appsheet.edit_row(
             TABLE_PDF,
             {
@@ -468,7 +481,7 @@ def process_fierro_invoice(
             len(invoice.items),
             len(invoice.guias),
             project or "<sin proyecto>",
-            review_status,
+            final_review_status,
         )
 
         return {
@@ -481,7 +494,8 @@ def process_fierro_invoice(
             "items": len(invoice.items),
             "guias": len(invoice.guias),
             "total_kg_facturados": _decimal_appsheet(invoice.total_kg_facturados),
-            "estado_revision": review_status,
+            "estado_revision": final_review_status,
+            "conciliacion_guias": reconciliation.as_dict(),
         }
 
     except Exception as exc:

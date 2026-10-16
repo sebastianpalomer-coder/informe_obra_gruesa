@@ -15,6 +15,7 @@ from .appsheet_client import AppSheetClient
 from .drive_client import DriveClient
 from .fierro_guide_parser import FierroGuide, parse_fierro_guide
 from .fierro_guide_reconciliation import reconcile_guide_orders
+from .fierro_invoice_guide_reconciliation import reconcile_invoices_for_guide
 
 
 TABLE_PDF = os.getenv(
@@ -280,6 +281,10 @@ def process_fierro_guide(
                 appsheet,
                 existing_guide_id,
             )
+            invoice_reconciliations = reconcile_invoices_for_guide(
+                appsheet,
+                existing_guide_id,
+            )
             refreshed = _find_by_key_optional(
                 appsheet, TABLE_GUIAS, GUIA_KEY, existing_guide_id
             ) or {}
@@ -292,6 +297,9 @@ def process_fierro_guide(
                     refreshed.get("ESTADO_REVISION") or ""
                 ).strip(),
                 "conciliacion_pedidos": reconciliation.as_dict(),
+                "conciliacion_facturas": [
+                    result.as_dict() for result in invoice_reconciliations
+                ],
             }
 
     pdf_row_created = bool(existing_pdf)
@@ -407,6 +415,10 @@ def process_fierro_guide(
 
         linked_invoice_refs = _link_existing_invoice_refs(appsheet, guide, guide_id)
         reconciliation = reconcile_guide_orders(appsheet, guide_id)
+        invoice_reconciliations = reconcile_invoices_for_guide(
+            appsheet,
+            guide_id,
+        )
         refreshed_guide = _find_by_key_optional(
             appsheet, TABLE_GUIAS, GUIA_KEY, guide_id
         ) or {}
@@ -447,6 +459,9 @@ def process_fierro_guide(
             "facturas_vinculadas": linked_invoice_refs,
             "estado_revision": final_review_status,
             "conciliacion_pedidos": reconciliation.as_dict(),
+            "conciliacion_facturas": [
+                result.as_dict() for result in invoice_reconciliations
+            ],
         }
 
     except Exception as exc:

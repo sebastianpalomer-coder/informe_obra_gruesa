@@ -171,9 +171,9 @@ def _parse_guide_references(text: str) -> tuple[FierroInvoiceGuideReference, ...
 
 
 def _iter_item_matches(text: str) -> Iterable[re.Match[str]]:
-    # El PDF de DSC extraído por pypdf entrega cada ítem en tres líneas:
-    # cantidad/código/descripción, descripción+hornada, precio+total.
-    pattern = re.compile(
+    # Formato DSC original: el material FE A630 aparece en la primera línea
+    # y vuelve a repetirse junto con la hornada en la segunda.
+    standard_pattern = re.compile(
         r"(?m)^\s*(?P<qty>\d+(?:[.,]\d+)?)\s+"
         r"(?P<code>[A-Z0-9_-]+)\s+"
         r"(?P<desc>FE\s+A630-420H\s+\d+(?:[.,]\d+)?mm\s+x\s+\d+(?:[.,]\d+)?\s*mts?\.)\s*\n"
@@ -184,7 +184,31 @@ def _iter_item_matches(text: str) -> Iterable[re.Match[str]]:
         r"\$\s*(?P<total>[\d.]+(?:,\d{1,2})?)\s*$",
         re.IGNORECASE,
     )
-    return pattern.finditer(text)
+
+    # Formato DSC de servicios (observado en factura 26823):
+    #   2010 800100105 SERVICIOS FIERRO BOD.CENTRAL
+    #   FE A630-420H 25mm x 9 mts. Hornada:[B00037771]
+    #   $ 720,00 $ 1.447.200
+    #
+    # Se conserva el código documental (p.ej. 800100105), pero el material real
+    # se toma desde la segunda línea. El negative lookahead evita duplicar líneas
+    # del formato original.
+    service_pattern = re.compile(
+        r"(?m)^\s*(?P<qty>\d+(?:[.,]\d+)?)\s+"
+        r"(?P<code>[A-Z0-9_-]+)\s+"
+        r"(?!FE\s+A630-420H\b)[^\n]+\s*\n"
+        r"\s*(?P<desc>FE\s+A630-420H\s+\d+(?:[.,]\d+)?mm\s+x\s+\d+(?:[.,]\d+)?\s*mts?\.)\s*"
+        r"Hornada:\[(?P<hornada>[^\]]+)\]\s*\n"
+        r"\s*\$\s*(?P<price>[\d.]+(?:,\d{1,2})?)\s+"
+        r"(?:\$\s*(?P<discount>[\d.]+(?:,\d{1,2})?)\s+)?"
+        r"\$\s*(?P<total>[\d.]+(?:,\d{1,2})?)\s*$",
+        re.IGNORECASE,
+    )
+
+    matches = list(standard_pattern.finditer(text))
+    matches.extend(service_pattern.finditer(text))
+    matches.sort(key=lambda match: match.start())
+    return iter(matches)
 
 
 def _parse_items(text: str) -> tuple[FierroInvoiceItem, ...]:

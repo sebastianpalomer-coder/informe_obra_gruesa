@@ -96,7 +96,8 @@ body {
 
 .meta-grid span,
 .kpi span,
-.projection-strip span {
+.schedule-strip span,
+.trend-projection-card span {
   display: block;
   color: var(--muted);
   font-size: 7.7pt;
@@ -208,34 +209,79 @@ body {
 .state-kpi.state-atrasado { border-top-color: var(--red); background: var(--red-soft); }
 .state-kpi.state-adelantado { border-top-color: var(--orange); background: var(--orange-soft); }
 
-.projection-strip {
+.schedule-strip {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 7px;
-  margin: 6px 0 8px;
+  margin: 6px 0 6px;
   break-inside: avoid;
 }
 
-.projection-strip > div {
+.schedule-strip > div {
   border: 1px solid var(--line);
   border-left: 4px solid var(--brand-electric);
   border-radius: 7px;
   padding: 6px 8px;
-  min-height: 48px;
+  min-height: 50px;
+  background: #fff;
 }
 
-.projection-strip strong {
+.schedule-strip strong {
+  display: block;
   color: var(--brand-blue);
-  font-size: 10.5pt;
+  font-size: 10.8pt;
+  line-height: 1.05;
   white-space: nowrap;
 }
 
-.projection-strip small {
+.schedule-strip small {
   display: block;
   color: var(--muted);
-  font-size: 6.8pt;
-  margin-top: 2px;
+  font-size: 6.4pt;
+  line-height: 1.15;
+  margin-top: 3px;
 }
+
+.schedule-delay.state-atrasado { border-left-color: var(--red); background: var(--red-soft); }
+.schedule-delay.state-en-rango { border-left-color: var(--green); background: var(--green-soft); }
+.schedule-delay.state-adelantado { border-left-color: var(--orange); background: var(--orange-soft); }
+
+.trend-projection-card {
+  display: grid;
+  grid-template-columns: 1.45fr 1fr;
+  gap: 0;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--brand-electric);
+  border-radius: 7px;
+  background: var(--brand-soft);
+  margin: 0 0 7px;
+  padding: 6px 8px;
+  min-height: 48px;
+  break-inside: avoid;
+}
+
+.trend-projection-main { padding-right: 10px; }
+.trend-projection-deviation { border-left: 1px solid #C9D7EE; padding-left: 10px; }
+
+.trend-projection-card strong {
+  display: block;
+  color: var(--brand-blue);
+  font-size: 10.8pt;
+  line-height: 1.05;
+  white-space: nowrap;
+}
+
+.trend-projection-card small {
+  display: block;
+  color: var(--muted);
+  font-size: 6.4pt;
+  line-height: 1.15;
+  margin-top: 3px;
+}
+
+.trend-projection-card.projection-pending { background: #F8FAFC; border-left-color: #AAB5C4; }
+.trend-projection-card.projection-pending strong,
+.trend-projection-card.projection-pending small { color: #687386; }
 
 .data-table {
   width: 100%;
@@ -271,7 +317,7 @@ body {
 }
 
 .chart-box img { max-width: 100%; }
-.curve-chart-box img { max-height: 205px; }
+.curve-chart-box img { max-height: 158px; }
 
 .weekly-kpis .kpi { min-height: 70px; }
 .weekly-kpis .kpi strong { font-size: 11.8pt; }
@@ -418,15 +464,9 @@ body {
 }
 
 
-/* V1.2.5 - proyección aún no habilitada */
-.projection-strip .projection-pending strong {
-  font-size: 11pt;
-  color: #687386;
-}
-
-.projection-strip .projection-pending small {
-  color: #687386;
-}
+/* Compatibilidad visual de proyección pendiente. */
+.projection-pending strong { color: #687386; }
+.projection-pending small { color: #687386; }
 
 /* V1.4.0: Control de resistencias, agregado sin cambiar los cinco módulos existentes. */
 .resistance-overview .resistance-kpis .kpi { min-height: 67px; }

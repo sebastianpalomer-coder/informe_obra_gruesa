@@ -148,6 +148,47 @@ def _linear_slope(points: list[tuple[date, float]]) -> float | None:
     return slope if slope > 0 else None
 
 
+def _interpolated_date_for_value(
+    points: list[tuple[date, float]],
+    value: float,
+) -> date | None:
+    """
+    Fecha equivalente del programa para un avance acumulado, interpolada
+    linealmente entre semanas. La serie se normaliza como acumulada no
+    decreciente para tolerar pequeñas correcciones de datos.
+    """
+    if not points:
+        return None
+
+    ordered = sorted(points, key=lambda item: item[0])
+    normalized: list[tuple[date, float]] = []
+    running_max: float | None = None
+
+    for point_date, point_value in ordered:
+        current = float(point_value)
+        if running_max is None or current > running_max:
+            running_max = current
+        normalized.append((point_date, running_max))
+
+    first_date, first_value = normalized[0]
+    last_date, last_value = normalized[-1]
+
+    if value <= first_value:
+        return first_date
+    if value >= last_value:
+        return last_date
+
+    for (d0, v0), (d1, v1) in zip(normalized, normalized[1:]):
+        if v0 <= value <= v1:
+            if abs(v1 - v0) <= 1e-9:
+                return d0
+            span_days = max((d1 - d0).days, 0)
+            fraction = (value - v0) / (v1 - v0)
+            return d0 + timedelta(days=round(span_days * fraction))
+
+    return None
+
+
 def build_general_summary(
     data: dict[str, Any],
     weeks: list[dict[str, Any]],
@@ -208,6 +249,11 @@ def build_general_summary(
         for item in series
         if item.get("upper") is not None
     ]
+    lower_points = [
+        (item["date"], item["lower"])
+        for item in series
+        if item.get("lower") is not None
+    ]
 
     target = max((v for _, v in upper_points), default=None)
     planned_finish = None
@@ -217,19 +263,45 @@ def build_general_summary(
             if abs(v - target) <= 1e-6
         ]
         if dates_at_target:
-            # Primer día en que la banda superior llega al objetivo final.
             planned_finish = min(dates_at_target)
 
-    # Proyección lineal del ritmo reciente.
-    #
-    # V1.2.5:
-    # No se publica una fecha estimada hasta contar con al menos
-    # 6 semanas cerradas que tengan un valor real acumulado.
-    #
-    # Una vez alcanzado el mínimo, la pendiente se calcula usando
-    # precisamente las últimas 6 semanas válidas. Esto evita que las
-    # primeras semanas de excavación / arranque generen proyecciones
-    # extremadamente inestables.
+    # Desfase ACTUAL contra programa. No es una proyección.
+    # ATRASADO se mide contra banda inferior; ADELANTADO contra superior;
+    # EN RANGO equivale a 0 días. La fecha se interpola entre semanas.
+    reference_date = cutoff or _week_date(current_week, end=True)
+    schedule_equivalent_date = None
+    schedule_delay_days = None
+
+    if reference_date is not None:
+        if state == "ATRASADO":
+            schedule_equivalent_date = _interpolated_date_for_value(
+                lower_points, real
+            )
+        elif state == "ADELANTADO":
+            schedule_equivalent_date = _interpolated_date_for_value(
+                upper_points, real
+            )
+        else:
+            schedule_equivalent_date = reference_date
+
+        if schedule_equivalent_date is not None:
+            schedule_delay_days = (reference_date - schedule_equivalent_date).days
+            if state == "ATRASADO":
+                schedule_delay_days = max(schedule_delay_days, 0)
+            elif state == "ADELANTADO":
+                schedule_delay_days = min(schedule_delay_days, 0)
+            else:
+                schedule_delay_days = 0
+
+    finish_with_current_delay = None
+    if planned_finish is not None and schedule_delay_days is not None:
+        finish_with_current_delay = planned_finish + timedelta(
+            days=schedule_delay_days
+        )
+
+    # Proyección TENDENCIAL según ritmo reciente.
+    # Se mantiene independiente del desfase actual y usa las últimas
+    # 6 semanas válidas, igual que la versión anterior.
     current_end = _week_date(current_week, end=True) or cutoff
     actual_points = [
         (item["date"], item["real"])
@@ -240,43 +312,25 @@ def build_general_summary(
     ]
 
     completed_weeks_with_real = len(actual_points)
-    projection_available = (
-        completed_weeks_with_real >= MIN_PROJECTION_WEEKS
-    )
-
+    projection_available = completed_weeks_with_real >= MIN_PROJECTION_WEEKS
     projection_points = (
-        actual_points[-MIN_PROJECTION_WEEKS:]
-        if projection_available
-        else []
+        actual_points[-MIN_PROJECTION_WEEKS:] if projection_available else []
     )
-
-    slope = (
-        _linear_slope(projection_points)
-        if projection_available
-        else None
-    )
+    slope = _linear_slope(projection_points) if projection_available else None
 
     estimated_finish = None
-    deviation_days = None
+    projection_deviation_days = None
 
-    if (
-        projection_available
-        and target is not None
-        and current_end is not None
-    ):
+    if projection_available and target is not None and current_end is not None:
         if real >= target:
             estimated_finish = current_end
         elif slope is not None and slope > 0:
             remaining = max(0.0, target - real)
             days_remaining = remaining / slope
-            estimated_finish = current_end + timedelta(
-                days=round(days_remaining)
-            )
+            estimated_finish = current_end + timedelta(days=round(days_remaining))
 
         if estimated_finish and planned_finish:
-            deviation_days = (
-                estimated_finish - planned_finish
-            ).days
+            projection_deviation_days = (estimated_finish - planned_finish).days
 
     return {
         "available": True,
@@ -295,8 +349,12 @@ def build_general_summary(
         "total_days": total_days,
         "target_final": target,
         "planned_finish_og": planned_finish,
+        "schedule_equivalent_date": schedule_equivalent_date,
+        "schedule_delay_days": schedule_delay_days,
+        "finish_with_current_delay": finish_with_current_delay,
         "estimated_finish": estimated_finish,
-        "deviation_days": deviation_days,
+        "projection_deviation_days": projection_deviation_days,
+        "deviation_days": projection_deviation_days,
         "projection_available": projection_available,
         "projection_min_weeks": MIN_PROJECTION_WEEKS,
         "projection_completed_weeks": completed_weeks_with_real,

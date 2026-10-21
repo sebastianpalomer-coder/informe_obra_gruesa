@@ -145,6 +145,24 @@
 
   {% endif %}
 
+  {% if fierro.get("available") %}
+  <div class="fierro-cover-strip">
+    <div>
+      <span>Suministro de fierro recibido</span>
+      <strong>{{ f.pct(fierro.get("received_ratio_budget")) }}</strong>
+      <small>
+        {{ f.num(fierro.get("received_kg"), 0) }} de
+        {{ f.num(fierro.get("budget_kg"), 0) }} kg presupuestados
+      </small>
+    </div>
+    <div>
+      <span>Fierro pendiente de facturar</span>
+      <strong>{{ f.num(fierro.get("pending_invoice_kg"), 0) }} kg</strong>
+      <small>Estimación neta: {{ f.clp(fierro.get("estimated_net_pending")) }}</small>
+    </div>
+  </div>
+  {% endif %}
+
   {% if chart_curves %}
   <div class="chart-box curve-chart-box">
     <img src="{{ chart_curves }}" alt="Curvas acumuladas de hormigón">
@@ -198,8 +216,168 @@
   </table>
 </section>
 
+<section class="page fierro-page">
+  <h2 class="module-title">02 · Control de suministro y facturación de fierro</h2>
+
+  {% if fierro.get("available") %}
+  <div class="section-context">
+    Suministro acumulado al {{ f.date(fierro.get("cutoff")) }} · Proyecto: {{ fierro.get("project", "—") }}
+  </div>
+
+  <div class="kpi-grid kpi-4 fierro-main-kpis">
+    <div class="kpi">
+      <span>Presupuesto</span>
+      <strong>{{ f.num(fierro.get("budget_kg"), 0) }} kg</strong>
+      <small>Precio base: {{ f.clp(fierro.get("budget_price_kg")) }}/kg</small>
+    </div>
+    <div class="kpi">
+      <span>Solicitado</span>
+      <strong>{{ f.num(fierro.get("requested_kg"), 0) }} kg</strong>
+      <small>{{ f.pct(fierro.get("requested_ratio_budget")) }} del presupuesto</small>
+    </div>
+    <div class="kpi fierro-received-kpi">
+      <span>Recibido en obra</span>
+      <strong>{{ f.num(fierro.get("received_kg"), 0) }} kg</strong>
+      <small>{{ f.pct(fierro.get("received_ratio_budget")) }} del presupuesto · suministro recibido</small>
+    </div>
+    <div class="kpi">
+      <span>Facturado</span>
+      <strong>{{ f.num(fierro.get("invoiced_kg"), 0) }} kg</strong>
+      <small>{{ f.pct(fierro.get("invoiced_ratio_received")) }} de lo recibido</small>
+    </div>
+  </div>
+
+  <div class="kpi-grid kpi-4 fierro-secondary-kpis">
+    <div class="kpi">
+      <span>Pendiente recibir</span>
+      <strong>{{ f.num(fierro.get("pending_receive_kg"), 0) }} kg</strong>
+      <small>Solicitado menos recibido</small>
+    </div>
+    <div class="kpi">
+      <span>Pendiente facturar</span>
+      <strong>{{ f.num(fierro.get("pending_invoice_kg"), 0) }} kg</strong>
+      <small>Recibido menos facturado</small>
+    </div>
+    <div class="kpi {% if fierro.get('received_without_order_kg', 0) > 0 %}fierro-warning-kpi{% endif %}">
+      <span>Recibido sin pedido</span>
+      <strong>{{ f.num(fierro.get("received_without_order_kg"), 0) }} kg</strong>
+      <small>Según conciliación guía ↔ pedido</small>
+    </div>
+    <div class="kpi {% if fierro.get('invoiced_without_received_kg', 0) > 0 %}fierro-danger-kpi{% endif %}">
+      <span>Facturado sin recibir</span>
+      <strong>{{ f.num(fierro.get("invoiced_without_received_kg"), 0) }} kg</strong>
+      <small>Control acumulado al corte</small>
+    </div>
+  </div>
+
+  <h3 class="sub-title fierro-sub-title">Suministro recibido por diámetro</h3>
+  <table class="data-table fierro-diameter-table">
+    <thead>
+      <tr>
+        <th>Diámetro</th>
+        <th>Solicitado kg</th>
+        <th>Recibido kg</th>
+        <th>Facturado kg</th>
+        <th>Pend. recibir kg</th>
+        <th>% recibido</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in fierro.get("diameters", []) %}
+      <tr>
+        <td><strong>{{ row.diameter }}</strong></td>
+        <td>{{ f.num(row.requested, 0) }}</td>
+        <td>{{ f.num(row.received, 0) }}</td>
+        <td>{{ f.num(row.invoiced, 0) }}</td>
+        <td>{{ f.num(row.pending_receive, 0) }}</td>
+        <td>{{ f.pct(row.received_ratio_requested) }}</td>
+      </tr>
+      {% endfor %}
+      {% if not fierro.get("diameters") %}
+      <tr><td colspan="6">Sin detalle por diámetro disponible al corte.</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+
+  <h3 class="sub-title fierro-sub-title">Control económico</h3>
+  <div class="kpi-grid kpi-4 fierro-financial-grid">
+    <div class="kpi">
+      <span>Neto facturado</span>
+      <strong>{{ f.clp(fierro.get("net_invoiced")) }}</strong>
+    </div>
+    <div class="kpi">
+      <span>Precio unitario promedio</span>
+      <strong>{{ f.clp(fierro.get("avg_price_kg")) }}/kg</strong>
+      <small>Promedio ponderado de facturas validadas</small>
+    </div>
+    <div class="kpi">
+      <span>Neto estimado x facturar</span>
+      <strong>{{ f.clp(fierro.get("estimated_net_pending")) }}</strong>
+      <small>Kg pendientes × precio unitario promedio</small>
+    </div>
+    <div class="kpi">
+      <span>Neto comprometido</span>
+      <strong>{{ f.clp(fierro.get("net_committed")) }}</strong>
+      <small>Facturado + estimación pendiente</small>
+    </div>
+  </div>
+
+  <h3 class="sub-title fierro-sub-title">Documentación y conciliación</h3>
+  <div class="fierro-doc-grid">
+    <div><span>Guías semana</span><strong>{{ fierro.get("guides_week", 0) }}</strong><small>{{ f.num(fierro.get("received_week_kg"), 0) }} kg recibidos</small></div>
+    <div><span>Facturas semana</span><strong>{{ fierro.get("invoices_week", 0) }}</strong><small>{{ f.num(fierro.get("invoiced_week_kg"), 0) }} kg facturados</small></div>
+    <div><span>Guías acumuladas</span><strong>{{ fierro.get("guides_count", 0) }}</strong><small>{{ fierro.get("guide_pending_count", 0) }} en estado PENDIENTE</small></div>
+    <div><span>Facturas acumuladas</span><strong>{{ fierro.get("invoices_count", 0) }}</strong><small>{{ fierro.get("invoice_validated_count", 0) }} validadas</small></div>
+  </div>
+
+  <div class="fierro-reconciliation-strip">
+    <div>
+      <span>Recepción conciliada con pedidos</span>
+      <strong>{{ f.pct(fierro.get("order_reconciliation_ratio")) }}</strong>
+      <small>{{ f.num(fierro.get("assigned_to_orders_kg"), 0) }} kg asignados a pedidos</small>
+    </div>
+    <div>
+      <span>Recepción respaldada por facturas</span>
+      <strong>{{ f.pct(fierro.get("invoice_coverage_ratio")) }}</strong>
+      <small>Comparación acumulada de kg facturados vs recibidos</small>
+    </div>
+  </div>
+
+  <h3 class="sub-title fierro-sub-title">Evolución últimas 3 semanas</h3>
+  <table class="data-table fierro-trend-table">
+    <thead>
+      <tr>
+        <th>Indicador</th>
+        {% for row in fierro.get("weekly_trend", []) %}<th>{{ row.label }}</th>{% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Kg recibidos</td>{% for row in fierro.get("weekly_trend", []) %}<td>{{ f.num(row.received_kg, 0) }}</td>{% endfor %}</tr>
+      <tr><td>Kg facturados</td>{% for row in fierro.get("weekly_trend", []) %}<td>{{ f.num(row.invoiced_kg, 0) }}</td>{% endfor %}</tr>
+      <tr><td>Guías recibidas</td>{% for row in fierro.get("weekly_trend", []) %}<td>{{ row.guides }}</td>{% endfor %}</tr>
+      <tr><td>Facturas recibidas</td>{% for row in fierro.get("weekly_trend", []) %}<td>{{ row.invoices }}</td>{% endfor %}</tr>
+    </tbody>
+  </table>
+
+  {% if fierro.get("alerts") %}
+  <div class="fierro-alert-box">
+    <strong>Alertas de control:</strong>
+    {% for alert in fierro.get("alerts", []) %}<span>• {{ alert }}</span>{% endfor %}
+  </div>
+  {% else %}
+  <div class="fierro-ok-box">Sin alertas relevantes de suministro o facturación al corte.</div>
+  {% endif %}
+
+  <div class="fierro-method-note">
+    “Recibido” corresponde a suministro ingresado a obra según guías de despacho. No representa fierro instalado ni avance físico de la estructura.
+  </div>
+  {% else %}
+  <div class="placeholder large">No hay información de suministro de fierro disponible para esta obra al corte del informe.</div>
+  {% endif %}
+</section>
+
 <section class="page">
-  <h2 class="module-title">02 · Control de alzaprimado y descimbre</h2>
+  <h2 class="module-title">03 · Control de alzaprimado y descimbre</h2>
 
   <div class="kpi-grid kpi-4">
     <div class="kpi"><span>Total paños</span><strong>{{ d.get("TOTAL_PANOS", "—") }}</strong></div>
@@ -239,7 +417,7 @@
 </section>
 
 <section class="page">
-  <h2 class="module-title">03 · Facturación de hormigón</h2>
+  <h2 class="module-title">04 · Facturación de hormigón</h2>
 
   <div class="section-context">
     Cierre al {{ f.date(d.get("FECHA_CORTE")) }} · Mes: {{ f.month_year(d.get("FECHA_CORTE")) }}
@@ -269,7 +447,7 @@
 </section>
 
 <section class="page">
-  <h2 class="module-title">04 · Registro fotográfico</h2>
+  <h2 class="module-title">05 · Registro fotográfico</h2>
 
   <div class="kpi-grid kpi-3">
     <div class="kpi"><span>Fotos semana</span><strong>{{ d.get("FOTOS_SEMANA", "—") }}</strong></div>

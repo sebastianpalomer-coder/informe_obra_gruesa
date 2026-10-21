@@ -519,3 +519,229 @@ body {
   font-size: 7.8pt; color: #60748e; line-height: 1.25;
   margin: 5px 3px 0;
 }
+
+/* ============================================================
+   V1.8.7 · Suministro y facturación de fierro
+   ============================================================ */
+
+.fierro-cover-strip {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 7px;
+  margin: 0 0 6px;
+  break-inside: avoid;
+}
+
+.fierro-cover-strip > div {
+  border: 1px solid var(--line);
+  border-left: 4px solid #6C5CE7;
+  border-radius: 7px;
+  padding: 5px 8px;
+  min-height: 42px;
+  background: #F8F7FF;
+}
+
+.fierro-cover-strip span,
+.fierro-doc-grid span,
+.fierro-reconciliation-strip span {
+  display: block;
+  color: var(--muted);
+  font-size: 6.9pt;
+  text-transform: uppercase;
+  font-weight: bold;
+  margin-bottom: 2px;
+}
+
+.fierro-cover-strip strong {
+  display: block;
+  color: var(--brand-blue);
+  font-size: 10.4pt;
+  line-height: 1.02;
+}
+
+.fierro-cover-strip small {
+  display: block;
+  color: var(--muted);
+  font-size: 6.2pt;
+  line-height: 1.12;
+  margin-top: 2px;
+}
+
+/* Mantener la portada en una sola página después de agregar fierro. */
+.cover .curve-chart-box img { max-height: 118px; }
+
+.fierro-page .module-title { margin-bottom: 7px; }
+.fierro-page .section-context { margin-bottom: 7px; }
+.fierro-page .kpi-grid { margin-bottom: 6px; }
+
+.fierro-main-kpis .kpi {
+  min-height: 63px;
+  padding-top: 6px;
+  padding-bottom: 5px;
+}
+
+.fierro-main-kpis .kpi strong {
+  font-size: 12.2pt;
+}
+
+.fierro-main-kpis .kpi small,
+.fierro-secondary-kpis .kpi small,
+.fierro-financial-grid .kpi small {
+  font-size: 6.4pt;
+  line-height: 1.12;
+}
+
+.fierro-received-kpi {
+  border-top-color: var(--green) !important;
+  background: var(--green-soft);
+}
+
+.fierro-secondary-kpis .kpi {
+  min-height: 54px;
+  padding-top: 5px;
+  padding-bottom: 4px;
+}
+
+.fierro-secondary-kpis .kpi strong {
+  font-size: 11.2pt;
+}
+
+.fierro-warning-kpi {
+  border-top-color: var(--orange) !important;
+  background: var(--orange-soft);
+}
+
+.fierro-danger-kpi {
+  border-top-color: var(--red) !important;
+  background: var(--red-soft);
+}
+
+.fierro-sub-title {
+  font-size: 9.6pt;
+  margin: 7px 0 4px;
+}
+
+.fierro-diameter-table,
+.fierro-trend-table {
+  margin: 3px 0 6px;
+  font-size: 7.2pt;
+}
+
+.fierro-diameter-table th,
+.fierro-diameter-table td,
+.fierro-trend-table th,
+.fierro-trend-table td {
+  padding: 3px 5px;
+}
+
+.fierro-diameter-table th:not(:first-child),
+.fierro-diameter-table td:not(:first-child),
+.fierro-trend-table th:not(:first-child),
+.fierro-trend-table td:not(:first-child) {
+  text-align: right;
+}
+
+.fierro-financial-grid .kpi {
+  min-height: 59px;
+  padding-top: 5px;
+  padding-bottom: 4px;
+}
+
+.fierro-financial-grid .kpi strong {
+  font-size: 10.4pt;
+}
+
+.fierro-doc-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin: 3px 0 5px;
+  break-inside: avoid;
+}
+
+.fierro-doc-grid > div {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  padding: 5px 7px;
+  text-align: center;
+  min-height: 49px;
+}
+
+.fierro-doc-grid strong {
+  display: block;
+  color: var(--brand-blue);
+  font-size: 12pt;
+  line-height: 1.05;
+}
+
+.fierro-doc-grid small {
+  display: block;
+  color: var(--muted);
+  font-size: 6.2pt;
+  line-height: 1.1;
+  margin-top: 2px;
+}
+
+.fierro-reconciliation-strip {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  margin: 4px 0 5px;
+  break-inside: avoid;
+}
+
+.fierro-reconciliation-strip > div {
+  border-left: 4px solid var(--brand-electric);
+  background: var(--brand-soft);
+  border-radius: 6px;
+  padding: 5px 8px;
+}
+
+.fierro-reconciliation-strip strong {
+  display: block;
+  color: var(--brand-blue);
+  font-size: 11.3pt;
+  line-height: 1.05;
+}
+
+.fierro-reconciliation-strip small {
+  display: block;
+  color: var(--muted);
+  font-size: 6.3pt;
+  margin-top: 2px;
+}
+
+.fierro-alert-box,
+.fierro-ok-box,
+.fierro-method-note {
+  break-inside: avoid;
+  border-radius: 6px;
+  padding: 5px 8px;
+  margin-top: 5px;
+  font-size: 6.8pt;
+  line-height: 1.22;
+}
+
+.fierro-alert-box {
+  border-left: 4px solid var(--orange);
+  background: var(--orange-soft);
+  color: #6B4A21;
+}
+
+.fierro-alert-box strong,
+.fierro-alert-box span {
+  display: block;
+}
+
+.fierro-ok-box {
+  border-left: 4px solid var(--green);
+  background: var(--green-soft);
+  color: #22764D;
+}
+
+.fierro-method-note {
+  border-left: 4px solid #6C5CE7;
+  background: #F8F7FF;
+  color: #536176;
+}

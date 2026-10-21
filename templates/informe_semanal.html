@@ -86,44 +86,63 @@
     </div>
   </div>
 
-  <div class="projection-strip">
+  <div class="schedule-strip">
     <div>
       <span>Término programado OG</span>
       <strong>{{ f.date(general.get("planned_finish_og")) }}</strong>
+      <small>Programa vigente de obra gruesa</small>
     </div>
 
-    {% if general.get("projection_available") %}
+    <div class="schedule-delay state-{{ general.get('state', '')|lower|replace(' ', '-') }}">
+      <span>Atraso actual vs programa</span>
+      <strong>{{ f.days_deviation(general.get("schedule_delay_days")) }}</strong>
+      <small>
+        Avance actual equivale al programa del
+        {{ f.date(general.get("schedule_equivalent_date")) }}
+      </small>
+    </div>
+
     <div>
-      <span>Fecha estimada de término</span>
+      <span>Término con desfase actual</span>
+      <strong>{{ f.date(general.get("finish_with_current_delay")) }}</strong>
+      <small>Si desde hoy no aumenta el desfase acumulado</small>
+    </div>
+  </div>
+
+  {% if general.get("projection_available") %}
+  <div class="trend-projection-card">
+    <div class="trend-projection-main">
+      <span>Proyección según ritmo reciente</span>
       <strong>{{ f.date(general.get("estimated_finish")) }}</strong>
-    </div>
-    <div>
-      <span>Proyección lineal</span>
-      <strong>{{ f.days_deviation(general.get("deviation_days")) }}</strong>
       <small>
-        Ritmo últimas {{ general.get("projection_points", 0) }} semanas
+        Si continúa el ritmo promedio observado en las últimas
+        {{ general.get("projection_points", 0) }} semanas
       </small>
     </div>
-    {% else %}
-    <div class="projection-pending">
-      <span>Fecha estimada de término</span>
-      <strong>PENDIENTE</strong>
-      <small>
-        Disponible desde la semana
-        {{ general.get("projection_min_weeks", 6) }}
-      </small>
+    <div class="trend-projection-deviation">
+      <span>Desviación proyectada</span>
+      <strong>{{ f.days_deviation(general.get("projection_deviation_days")) }}</strong>
+      <small>Respecto del término programado OG</small>
     </div>
-    <div class="projection-pending">
-      <span>Proyección lineal</span>
+  </div>
+  {% else %}
+  <div class="trend-projection-card projection-pending">
+    <div class="trend-projection-main">
+      <span>Proyección según ritmo reciente</span>
       <strong>NO DISPONIBLE</strong>
       <small>
-        {{ general.get("projection_completed_weeks", 0) }}
-        de {{ general.get("projection_min_weeks", 6) }}
-        semanas con datos
+        Disponible al completar {{ general.get("projection_min_weeks", 6) }}
+        semanas con avance real
       </small>
     </div>
-    {% endif %}
+    <div class="trend-projection-deviation">
+      <span>Datos disponibles</span>
+      <strong>{{ general.get("projection_completed_weeks", 0) }} de {{ general.get("projection_min_weeks", 6) }} semanas</strong>
+      <small>La proyección tendencial aún no se publica</small>
+    </div>
   </div>
+  {% endif %}
+
   {% endif %}
 
   {% if chart_curves %}

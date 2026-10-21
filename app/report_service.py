@@ -9,6 +9,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from weasyprint import CSS, HTML
 
 from .analytics import (
+    build_fierro_summary,
     build_floor_map,
     build_general_summary,
     build_invoice_summary,
@@ -49,6 +50,17 @@ TABLE_VISTA = "VISTA_ALZAPRIMADO"
 TABLE_FOTOS = "REGISTRO_AVANCE_SEMANAL"
 TABLE_PISOS = "PISOS"
 TABLE_FACTURAS = "FACTURAS"
+
+# Suministro y facturación de fierro.
+TABLE_RESUMEN_FIERRO = "TABLA_RESUMEN_FIERRO"
+TABLE_PEDIDO_FIERRO = "PEDIDO_FIERRO"
+TABLE_PEDIDO_FIERRO_DETALLE = "PEDIDO_FIERRO_DETALLE"
+TABLE_FIERRO_GUIAS = "FIERRO_GUIAS"
+TABLE_FIERRO_GUIAS_DETALLE = "FIERRO_GUIAS_DETALLE"
+TABLE_FIERRO_GUIAS_PEDIDOS = "FIERRO_GUIAS_PEDIDOS"
+TABLE_FIERRO_FACTURAS = "FIERRO_FACTURAS"
+TABLE_FIERRO_FACTURAS_DETALLE = "FIERRO_FACTURAS_DETALLE"
+
 TABLE_RESISTENCIAS = "TABLA_RESISTENCIA"
 TABLE_CERTIFICADOS = "TABLA_CERTIFICADO_HORMIGON"
 TABLE_VISITAS_MUESTRA = "TABLA_VISITA_TOMA_MUESTRA"
@@ -358,6 +370,41 @@ def load_report_data(id_informe: str) -> dict[str, Any]:
             "No se encontró FECHA_CORTE ni término de semana; se usa la fecha actual."
         )
 
+    # ------------------------------------------------------------
+    # V1.8.7 · Suministro y facturación de fierro
+    # ------------------------------------------------------------
+    # El capítulo de fierro es informativo y no debe impedir la emisión del
+    # informe si una tabla está temporalmente inaccesible. Además, el resumen
+    # respeta FECHA_CORTE para evitar contaminar informes históricos con
+    # pedidos, guías o facturas posteriores.
+    fierro_warnings: list[str] = []
+    fierro: dict[str, Any] = {
+        "available": False,
+        "alerts": [],
+        "diameters": [],
+        "weekly_trend": [],
+    }
+
+    try:
+        fierro = build_fierro_summary(
+            data=data,
+            summary_rows=appsheet.find_rows(TABLE_RESUMEN_FIERRO),
+            order_rows=appsheet.find_rows(TABLE_PEDIDO_FIERRO),
+            order_detail_rows=appsheet.find_rows(TABLE_PEDIDO_FIERRO_DETALLE),
+            guide_rows=appsheet.find_rows(TABLE_FIERRO_GUIAS),
+            guide_detail_rows=appsheet.find_rows(TABLE_FIERRO_GUIAS_DETALLE),
+            assignment_rows=appsheet.find_rows(TABLE_FIERRO_GUIAS_PEDIDOS),
+            invoice_rows=appsheet.find_rows(TABLE_FIERRO_FACTURAS),
+            invoice_detail_rows=appsheet.find_rows(TABLE_FIERRO_FACTURAS_DETALLE),
+            cutoff=cutoff,
+            week_start=general.get("week_start"),
+            week_end=general.get("week_end"),
+        )
+    except Exception as exc:
+        fierro_warnings.append(
+            f"No fue posible construir el capítulo de fierro: {exc}"
+        )
+
     resistance = build_resistance_report(
         rows=resistances,
         certificates=certificates,
@@ -384,12 +431,14 @@ def load_report_data(id_informe: str) -> dict[str, Any]:
         floor_map=floor_map,
         cutoff=cutoff,
     )
+    warnings.extend(fierro_warnings)
 
     return {
         "data": data,
         "general": general,
         "weekly": weekly,
         "invoices": invoices,
+        "fierro": fierro,
         "resistance": resistance,
         "svg": svg_data_uri,
         "svg_snapshot": svg_snapshot,
@@ -410,6 +459,7 @@ def build_context(bundle: dict[str, Any]) -> dict[str, Any]:
         "general": general,
         "weekly": weekly,
         "invoices": bundle["invoices"],
+        "fierro": bundle.get("fierro") or {"available": False},
         "resistance": bundle["resistance"],
         "logo_path": (
             logo_file.resolve().as_uri()
@@ -447,6 +497,15 @@ def render_pdf_bytes(
 ) -> bytes:
     template = env.get_template("informe_semanal.html")
     html = template.render(**build_context(bundle))
+
+    # V1.8.7 agrega un capítulo antes del control de resistencia. El template
+    # resistance_chapter.html existente conserva el rótulo histórico "05";
+    # renumerarlo aquí evita exigir otro archivo de despliegue sólo por el título.
+    html = html.replace(
+        "05 · Control de resistencia del hormigón",
+        "06 · Control de resistencia del hormigón",
+        1,
+    )
 
     css_file = STATIC_DIR / "report.css"
     stylesheets = [CSS(filename=str(css_file))] if css_file.exists() else []

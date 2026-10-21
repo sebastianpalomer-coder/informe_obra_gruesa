@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 from typing import Any
+import unicodedata
 
 from .formatters import (
     parse_appsheet_date,
@@ -361,6 +362,488 @@ def build_general_summary(
         "projection_slope_m3_day": slope,
         "projection_points": len(projection_points),
         "series": series,
+    }
+
+
+# ============================================================
+# SUMINISTRO Y FACTURACIÓN DE FIERRO
+# ============================================================
+
+def _normalize_fierro_text(value: Any) -> str:
+    text = unicodedata.normalize("NFKD", str(value or ""))
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    text = text.upper()
+    text = "".join(ch if ch.isalnum() else " " for ch in text)
+    return " ".join(text.split())
+
+
+def _fierro_project(
+    data: dict[str, Any],
+    summary_rows: list[dict[str, Any]],
+) -> str:
+    """
+    Resuelve el nombre usado por las tablas de fierro.
+
+    Ejemplo actual:
+    OBRA[NOMBRE_OBRA] = "Hotel Bellet"
+    tablas de fierro[PROYECTO] = "Bellet"
+    """
+    explicit = pick(
+        data,
+        "FIERRO_PROYECTO",
+        "PROYECTO_FIERRO",
+        default=None,
+    )
+    candidates = [
+        explicit,
+        data.get("NOMBRE_OBRA"),
+        data.get("DIRECCION_OBRA"),
+    ]
+    normalized_candidates = [
+        _normalize_fierro_text(value)
+        for value in candidates
+        if str(value or "").strip()
+    ]
+
+    for row in summary_rows:
+        project = str(row.get("PROYECTO") or "").strip()
+        project_norm = _normalize_fierro_text(project)
+        if not project_norm:
+            continue
+        for candidate in normalized_candidates:
+            if project_norm == candidate or project_norm in candidate or candidate in project_norm:
+                return project
+
+    if explicit not in (None, ""):
+        return str(explicit).strip()
+
+    name = str(data.get("NOMBRE_OBRA") or "").strip()
+    name_norm = _normalize_fierro_text(name)
+    if "BELLET" in name_norm:
+        return "Bellet"
+    if "PATIO DOBLADO" in name_norm or "PATIO" in name_norm:
+        return "Patio Doblado"
+    return name
+
+
+def _same_fierro_project(value: Any, target: str) -> bool:
+    left = _normalize_fierro_text(value)
+    right = _normalize_fierro_text(target)
+    if not left or not right:
+        return False
+    return left == right or left in right or right in left
+
+
+def _fierro_row_date(row: dict[str, Any], *keys: str) -> date | None:
+    return parse_appsheet_date(pick(row, *keys, default=None))
+
+
+def _fierro_before_cutoff(
+    row: dict[str, Any],
+    cutoff: date | None,
+    *date_keys: str,
+) -> bool:
+    if cutoff is None:
+        return True
+    row_date = _fierro_row_date(row, *date_keys)
+    return row_date is not None and row_date <= cutoff
+
+
+def _diameter_label(value: Any) -> str:
+    n = to_float_or_none(value)
+    if n is None:
+        return str(value or "—")
+    if abs(n - round(n)) <= 1e-9:
+        return f"Ø{int(round(n))}"
+    return f"Ø{n:.1f}".replace(".", ",")
+
+
+def _diameter_sort_key(label: str) -> tuple[int, float | str]:
+    raw = str(label).replace("Ø", "").replace(",", ".").strip()
+    try:
+        return (0, float(raw))
+    except ValueError:
+        return (1, raw)
+
+
+def _zero_small_difference(value: float, base: float, tolerance: float = 0.01) -> float:
+    value = max(float(value), 0.0)
+    if base > 0 and value / base <= tolerance:
+        return 0.0
+    return value
+
+
+def build_fierro_summary(
+    data: dict[str, Any],
+    summary_rows: list[dict[str, Any]],
+    order_rows: list[dict[str, Any]],
+    order_detail_rows: list[dict[str, Any]],
+    guide_rows: list[dict[str, Any]],
+    guide_detail_rows: list[dict[str, Any]],
+    assignment_rows: list[dict[str, Any]],
+    invoice_rows: list[dict[str, Any]],
+    invoice_detail_rows: list[dict[str, Any]],
+    cutoff: date | None,
+    week_start: date | None,
+    week_end: date | None,
+) -> dict[str, Any]:
+    """
+    Resumen ejecutivo de SUMINISTRO de fierro.
+
+    Importante: "recibido" describe material ingresado a obra respaldado por
+    guías. No representa fierro instalado ni avance físico de estructura.
+    Todos los acumulados respetan FECHA_CORTE para que un informe histórico no
+    incorpore documentos posteriores.
+    """
+    project = _fierro_project(data, summary_rows)
+
+    budget_row = next(
+        (
+            row for row in summary_rows
+            if _same_fierro_project(row.get("PROYECTO"), project)
+        ),
+        None,
+    )
+    budget_kg = to_float_or_none((budget_row or {}).get("KG_PRESUPUESTO"))
+    budget_price_kg = to_float_or_none(
+        (budget_row or {}).get("PRECIO_PRESUPUESTO_KG")
+    )
+
+    selected_orders = [
+        row for row in order_rows
+        if _same_fierro_project(row.get("PROYECTO"), project)
+        and _fierro_before_cutoff(row, cutoff, "FECHA_PEDIDO")
+    ]
+    order_ids = {
+        str(
+            pick(
+                row,
+                "ID_PEDIDO_FIERRO",
+                "ID_PEDIDO_FIERRO ",
+                default="",
+            )
+            or ""
+        ).strip()
+        for row in selected_orders
+    }
+    order_ids.discard("")
+
+    selected_order_details = [
+        row for row in order_detail_rows
+        if str(row.get("ID_PEDIDO_FIERRO") or "").strip() in order_ids
+    ]
+    requested_kg = sum(
+        to_float_or_none(row.get("KG_SOLICITADOS")) or 0.0
+        for row in selected_order_details
+    )
+
+    selected_guides = [
+        row for row in guide_rows
+        if _same_fierro_project(row.get("PROYECTO"), project)
+        and _fierro_before_cutoff(row, cutoff, "FECHA_GUIA")
+    ]
+    guide_ids = {
+        str(row.get("ID_GUIA_FIERRO") or "").strip()
+        for row in selected_guides
+        if str(row.get("ID_GUIA_FIERRO") or "").strip()
+    }
+    selected_guide_details = [
+        row for row in guide_detail_rows
+        if str(row.get("ID_GUIA_FIERRO") or "").strip() in guide_ids
+    ]
+    received_kg = sum(
+        to_float_or_none(row.get("TOTAL_KG_DESPACHADOS")) or 0.0
+        for row in selected_guides
+    )
+
+    selected_assignments = [
+        row for row in assignment_rows
+        if str(row.get("ID_GUIA_FIERRO") or "").strip() in guide_ids
+    ]
+    assigned_to_orders_kg = sum(
+        to_float_or_none(row.get("KG_ASIGNADOS")) or 0.0
+        for row in selected_assignments
+    )
+    assigned_to_orders_kg = min(assigned_to_orders_kg, received_kg)
+    received_without_order_kg = _zero_small_difference(
+        received_kg - assigned_to_orders_kg,
+        received_kg,
+    )
+
+    selected_invoices = [
+        row for row in invoice_rows
+        if _same_fierro_project(row.get("PROYECTO"), project)
+        and _fierro_before_cutoff(row, cutoff, "FECHA_EMISION")
+    ]
+    invoice_ids = {
+        str(row.get("ID_FACTURA_FIERRO") or "").strip()
+        for row in selected_invoices
+        if str(row.get("ID_FACTURA_FIERRO") or "").strip()
+    }
+    selected_invoice_details = [
+        row for row in invoice_detail_rows
+        if str(row.get("ID_FACTURA_FIERRO") or "").strip() in invoice_ids
+    ]
+
+    invoiced_kg = sum(
+        to_float_or_none(row.get("TOTAL_KG_FACTURADOS")) or 0.0
+        for row in selected_invoices
+    )
+    net_invoiced = sum(
+        to_float_or_none(row.get("NETO_FACTURA")) or 0.0
+        for row in selected_invoices
+    )
+
+    # El precio usado para estimar lo pendiente se toma sólo desde facturas
+    # validadas, para que una factura observada no distorsione el promedio.
+    validated_invoices_for_price = [
+        row for row in selected_invoices
+        if str(row.get("ESTADO_REVISION") or "").strip().upper() == "VALIDADA"
+    ]
+    validated_price_kg = sum(
+        to_float_or_none(row.get("TOTAL_KG_FACTURADOS")) or 0.0
+        for row in validated_invoices_for_price
+    )
+    validated_price_net = sum(
+        to_float_or_none(row.get("NETO_FACTURA")) or 0.0
+        for row in validated_invoices_for_price
+    )
+    avg_price_kg = (
+        validated_price_net / validated_price_kg
+        if validated_price_kg > 0
+        else None
+    )
+
+    pending_receive_kg = max(requested_kg - received_kg, 0.0)
+    pending_invoice_kg = max(received_kg - invoiced_kg, 0.0)
+    invoiced_without_received_kg = _zero_small_difference(
+        invoiced_kg - received_kg,
+        invoiced_kg,
+    )
+    estimated_net_pending = (
+        pending_invoice_kg * avg_price_kg
+        if avg_price_kg is not None
+        else None
+    )
+    if pending_invoice_kg <= 1e-9:
+        net_committed = net_invoiced
+    elif estimated_net_pending is not None:
+        net_committed = net_invoiced + estimated_net_pending
+    else:
+        net_committed = None
+
+    requested_ratio_budget = (
+        requested_kg / budget_kg
+        if budget_kg is not None and budget_kg > 0
+        else None
+    )
+    received_ratio_budget = (
+        received_kg / budget_kg
+        if budget_kg is not None and budget_kg > 0
+        else None
+    )
+    invoiced_ratio_received = (
+        invoiced_kg / received_kg
+        if received_kg > 0
+        else None
+    )
+    order_reconciliation_ratio = (
+        assigned_to_orders_kg / received_kg
+        if received_kg > 0
+        else None
+    )
+    invoice_coverage_ratio = (
+        min(invoiced_kg, received_kg) / received_kg
+        if received_kg > 0
+        else None
+    )
+
+    requested_by_diameter: dict[str, float] = {}
+    for row in selected_order_details:
+        label = _diameter_label(row.get("DIAMETRO_MM"))
+        requested_by_diameter[label] = (
+            requested_by_diameter.get(label, 0.0)
+            + (to_float_or_none(row.get("KG_SOLICITADOS")) or 0.0)
+        )
+
+    received_by_diameter: dict[str, float] = {}
+    for row in selected_guide_details:
+        label = _diameter_label(row.get("DIAMETRO_MM"))
+        received_by_diameter[label] = (
+            received_by_diameter.get(label, 0.0)
+            + (to_float_or_none(row.get("KG_DESPACHADOS")) or 0.0)
+        )
+
+    invoiced_by_diameter: dict[str, float] = {}
+    for row in selected_invoice_details:
+        label = _diameter_label(row.get("DIAMETRO_MM"))
+        invoiced_by_diameter[label] = (
+            invoiced_by_diameter.get(label, 0.0)
+            + (to_float_or_none(row.get("KG_FACTURADOS")) or 0.0)
+        )
+
+    diameter_rows: list[dict[str, Any]] = []
+    for label in sorted(
+        set(requested_by_diameter) | set(received_by_diameter) | set(invoiced_by_diameter),
+        key=_diameter_sort_key,
+    ):
+        requested_d = requested_by_diameter.get(label, 0.0)
+        received_d = received_by_diameter.get(label, 0.0)
+        invoiced_d = invoiced_by_diameter.get(label, 0.0)
+        diameter_rows.append(
+            {
+                "diameter": label,
+                "requested": requested_d,
+                "received": received_d,
+                "invoiced": invoiced_d,
+                "pending_receive": max(requested_d - received_d, 0.0),
+                "received_ratio_requested": (
+                    received_d / requested_d if requested_d > 0 else None
+                ),
+            }
+        )
+
+    guide_statuses = [
+        str(row.get("ESTADO_REVISION") or "").strip().upper()
+        for row in selected_guides
+    ]
+    invoice_statuses = [
+        str(row.get("ESTADO_REVISION") or "").strip().upper()
+        for row in selected_invoices
+    ]
+    guide_alert_count = sum(
+        1 for status in guide_statuses
+        if status.startswith("REVISAR") or status.startswith("ERROR")
+    )
+    guide_pending_count = sum(1 for status in guide_statuses if status == "PENDIENTE")
+    invoice_validated_count = sum(1 for status in invoice_statuses if status == "VALIDADA")
+    invoice_alert_count = sum(1 for status in invoice_statuses if status != "VALIDADA")
+
+    current_end = week_end or cutoff
+    current_start = week_start
+    if current_end is not None and current_start is None:
+        current_start = current_end - timedelta(days=6)
+
+    guides_week = []
+    invoices_week = []
+    if current_start is not None and current_end is not None:
+        guides_week = [
+            row for row in selected_guides
+            if (
+                (d := _fierro_row_date(row, "FECHA_GUIA")) is not None
+                and current_start <= d <= current_end
+            )
+        ]
+        invoices_week = [
+            row for row in selected_invoices
+            if (
+                (d := _fierro_row_date(row, "FECHA_EMISION")) is not None
+                and current_start <= d <= current_end
+            )
+        ]
+
+    weekly_trend: list[dict[str, Any]] = []
+    if current_start is not None and current_end is not None:
+        labels = ["Hace 2 semanas", "Semana anterior", "Semana actual"]
+        for idx, weeks_back in enumerate((2, 1, 0)):
+            start = current_start - timedelta(days=7 * weeks_back)
+            end = current_end - timedelta(days=7 * weeks_back)
+            g_rows = [
+                row for row in selected_guides
+                if (
+                    (d := _fierro_row_date(row, "FECHA_GUIA")) is not None
+                    and start <= d <= end
+                )
+            ]
+            i_rows = [
+                row for row in selected_invoices
+                if (
+                    (d := _fierro_row_date(row, "FECHA_EMISION")) is not None
+                    and start <= d <= end
+                )
+            ]
+            weekly_trend.append(
+                {
+                    "label": labels[idx],
+                    "start": start,
+                    "end": end,
+                    "guides": len(g_rows),
+                    "received_kg": sum(
+                        to_float_or_none(row.get("TOTAL_KG_DESPACHADOS")) or 0.0
+                        for row in g_rows
+                    ),
+                    "invoices": len(i_rows),
+                    "invoiced_kg": sum(
+                        to_float_or_none(row.get("TOTAL_KG_FACTURADOS")) or 0.0
+                        for row in i_rows
+                    ),
+                }
+            )
+
+    alerts: list[str] = []
+    if received_without_order_kg > 0:
+        alerts.append(
+            f"{received_without_order_kg:.0f} kg recibidos sin pedido conciliado."
+        )
+    if invoiced_without_received_kg > 0:
+        alerts.append(
+            f"{invoiced_without_received_kg:.0f} kg facturados por sobre lo recibido al corte."
+        )
+    if guide_alert_count > 0:
+        alerts.append(f"{guide_alert_count} guía(s) requieren revisión.")
+    if invoice_alert_count > 0:
+        alerts.append(f"{invoice_alert_count} factura(s) no están validadas.")
+
+    available = bool(
+        budget_row
+        or selected_orders
+        or selected_guides
+        or selected_invoices
+    )
+
+    return {
+        "available": available,
+        "project": project,
+        "cutoff": cutoff,
+        "budget_kg": budget_kg,
+        "budget_price_kg": budget_price_kg,
+        "requested_kg": requested_kg,
+        "received_kg": received_kg,
+        "invoiced_kg": invoiced_kg,
+        "pending_receive_kg": pending_receive_kg,
+        "pending_invoice_kg": pending_invoice_kg,
+        "received_without_order_kg": received_without_order_kg,
+        "invoiced_without_received_kg": invoiced_without_received_kg,
+        "requested_ratio_budget": requested_ratio_budget,
+        "received_ratio_budget": received_ratio_budget,
+        "invoiced_ratio_received": invoiced_ratio_received,
+        "assigned_to_orders_kg": assigned_to_orders_kg,
+        "order_reconciliation_ratio": order_reconciliation_ratio,
+        "invoice_coverage_ratio": invoice_coverage_ratio,
+        "net_invoiced": net_invoiced,
+        "avg_price_kg": avg_price_kg,
+        "estimated_net_pending": estimated_net_pending,
+        "net_committed": net_committed,
+        "diameters": diameter_rows,
+        "orders_count": len(selected_orders),
+        "guides_count": len(selected_guides),
+        "invoices_count": len(selected_invoices),
+        "guides_week": len(guides_week),
+        "invoices_week": len(invoices_week),
+        "received_week_kg": sum(
+            to_float_or_none(row.get("TOTAL_KG_DESPACHADOS")) or 0.0
+            for row in guides_week
+        ),
+        "invoiced_week_kg": sum(
+            to_float_or_none(row.get("TOTAL_KG_FACTURADOS")) or 0.0
+            for row in invoices_week
+        ),
+        "guide_alert_count": guide_alert_count,
+        "guide_pending_count": guide_pending_count,
+        "invoice_validated_count": invoice_validated_count,
+        "invoice_alert_count": invoice_alert_count,
+        "weekly_trend": weekly_trend,
+        "alerts": alerts,
     }
 
 

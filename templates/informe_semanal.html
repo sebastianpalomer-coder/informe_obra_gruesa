@@ -221,7 +221,7 @@
 
   {% if fierro.get("available") %}
   <div class="section-context">
-    Suministro acumulado al {{ f.date(fierro.get("cutoff")) }} · Proyecto: {{ fierro.get("project", "—") }}
+    Suministro acumulado al {{ f.date(fierro.get("cutoff")) }} · Consolidado: {{ fierro.get("project", "Todos los proyectos") }}
   </div>
 
   <div class="kpi-grid kpi-4 fierro-main-kpis">
@@ -369,10 +369,10 @@
   {% endif %}
 
   <div class="fierro-method-note">
-    “Recibido” corresponde a suministro ingresado a obra según guías de despacho. No representa fierro instalado ni avance físico de la estructura.
+    “Recibido” corresponde a suministro ingresado a obra según guías de despacho. No representa fierro instalado ni avance físico de la estructura. Los indicadores de esta página consolidan todos los proyectos registrados en el control de fierro.
   </div>
   {% else %}
-  <div class="placeholder large">No hay información de suministro de fierro disponible para esta obra al corte del informe.</div>
+  <div class="placeholder large">No hay información de suministro de fierro disponible al corte del informe.</div>
   {% endif %}
 </section>
 

@@ -35,6 +35,9 @@ LAB_COLUMN = os.getenv(
 OBSERVATION_COLUMN = os.getenv(
     "CONCRETE_CERTIFICATE_OBSERVATION_COLUMN", ""
 ).strip()
+CERT_URL_COLUMN = os.getenv(
+    "CONCRETE_CERTIFICATE_URL_COLUMN", "URL_CERTIFICADO"
+).strip() or "URL_CERTIFICADO"
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +146,7 @@ def _upsert_certificate(
     appsheet: AppSheetClient,
     cert: ConcreteCertificate,
     guide_id: str,
+    certificate_url: str = "",
 ) -> None:
     row: dict[str, Any] = {
         CERT_KEY: cert.certificate_number,
@@ -155,6 +159,7 @@ def _upsert_certificate(
         "R_28_DIAS_2": _to_number_or_blank(cert.r28_2_mpa),
         "VIGENTE": True,
         "FECHA_REGISTRO": _now_appsheet(),
+        CERT_URL_COLUMN: certificate_url,
     }
     if OBSERVATION_COLUMN:
         row[OBSERVATION_COLUMN] = cert.observation
@@ -173,6 +178,7 @@ def _link_resistance_rows(
     appsheet: AppSheetClient,
     guide_id: str,
     certificate_number: str,
+    certificate_url: str = "",
 ) -> int:
     rows = appsheet.find_rows(TABLE_RESISTANCE)
     linked = 0
@@ -190,6 +196,7 @@ def _link_resistance_rows(
             {
                 RESISTANCE_KEY: sample_id,
                 CERT_KEY: certificate_number,
+                CERT_URL_COLUMN: certificate_url,
             },
         )
         linked += 1
@@ -211,11 +218,22 @@ def process_concrete_certificate(
 
     appsheet = AppSheetClient()
     guide_id = _find_guide_id(appsheet, cert.guide_number)
-    _upsert_certificate(appsheet, cert, guide_id)
+    certificate_url = (
+        f"https://drive.google.com/file/d/{drive_file_id}/view"
+        if str(drive_file_id or "").strip()
+        else ""
+    )
+    _upsert_certificate(
+        appsheet,
+        cert,
+        guide_id,
+        certificate_url,
+    )
     linked = _link_resistance_rows(
         appsheet,
         guide_id,
         cert.certificate_number,
+        certificate_url,
     )
 
     logger.info(
@@ -233,5 +251,6 @@ def process_concrete_certificate(
         "modified_time": modified_time,
         "id_guia": guide_id,
         "resistance_rows_linked": linked,
+        "certificate_url": certificate_url,
         **_certificate_payload(cert),
     }

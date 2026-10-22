@@ -257,6 +257,224 @@ def _enrich_with_obra(
     return data
 
 
+
+
+def _normalize_resistance_certificates(
+    certificates: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Normaliza certificados según criterio operativo V1.8.9.
+
+    - R_PRELIMINAR conserva su edad real y no se trata como R_7_DIAS.
+    - Si existe un único resultado a 28 días, se replica en la segunda posición
+      sólo para mantener la estructura matemática del análisis.
+    - La réplica queda registrada en metadata para mostrar una nota auditable.
+    """
+    normalized: list[dict[str, Any]] = []
+    replicated: list[dict[str, Any]] = []
+
+    for original in certificates:
+        row = dict(original)
+        # Evitar que datos históricos heredados de la columna antigua vuelvan a
+        # entrar como una supuesta medición fija a 7 días.
+        row.pop("R_7_DIAS", None)
+
+        r1 = row.get("R_28_DIAS_1")
+        r2 = row.get("R_28_DIAS_2")
+        has1 = r1 not in (None, "", "—")
+        has2 = r2 not in (None, "", "—")
+
+        replicated_field = None
+        replicated_value = None
+        if has1 and not has2:
+            row["R_28_DIAS_2"] = r1
+            replicated_field = "R_28_DIAS_2"
+            replicated_value = r1
+        elif has2 and not has1:
+            row["R_28_DIAS_1"] = r2
+            replicated_field = "R_28_DIAS_1"
+            replicated_value = r2
+
+        if replicated_field:
+            note = (
+                "El certificado informa un solo resultado a 28 días. "
+                f"{replicated_field} replica el resultado disponible "
+                "para mantener la estructura de cálculo."
+            )
+            existing = str(
+                row.get("OBSERVACION_RESULTADOS")
+                or row.get("OBSERVACION")
+                or ""
+            ).strip()
+            row["_OBSERVACION_RESULTADOS_SISTEMA"] = (
+                f"{existing} {note}".strip() if existing else note
+            )
+            replicated.append({
+                "certificate_id": row.get("ID_CERTIFICADO"),
+                "guide_id": row.get("ID_GUIA"),
+                "value": replicated_value,
+                "note": note,
+            })
+
+        normalized.append(row)
+
+    return normalized, replicated
+
+
+def _render_replicated_28_html(rows: list[dict[str, Any]]) -> str:
+    if not rows:
+        return ""
+    import html as _html
+    items = []
+    for row in rows:
+        cert = _html.escape(str(row.get("certificate_id") or "certificado sin ID"))
+        note = _html.escape(str(row.get("note") or ""))
+        items.append(f"<div>• {cert}: {note}</div>")
+    return (
+        '<div class="resistance-replicated-note">'
+        '<strong>Trazabilidad de resultados a 28 días:</strong>'
+        + ''.join(items)
+        + '</div>'
+    )
+
+
+def _build_preliminary_resistance_summary(
+    certificates: list[dict[str, Any]],
+    guide_rows: list[dict[str, Any]],
+    visit_rows: list[dict[str, Any]],
+    cutoff: date,
+) -> list[dict[str, Any]]:
+    """Construye resultados preliminares sólo para visualización.
+
+    R_PRELIMINAR puede corresponder a 3, 7 u otra edad temprana. Por diseño,
+    este valor NO se transforma en R_7_DIAS y NO participa de evaluación de
+    cumplimiento, resistencia individual definitiva ni media móvil.
+    """
+    guide_map = {
+        str(r.get("ID_REGISTRO") or r.get("ID_GUIA") or "").strip(): r
+        for r in guide_rows
+        if str(r.get("ID_REGISTRO") or r.get("ID_GUIA") or "").strip()
+    }
+    visit_map = {}
+    for row in visit_rows:
+        gid = str(row.get("ID_GUIA") or "").strip()
+        if gid and gid not in visit_map:
+            visit_map[gid] = row
+
+    result: list[dict[str, Any]] = []
+    for cert in certificates:
+        if str(cert.get("VIGENTE") or "").strip().lower() in {"false", "0", "no"}:
+            continue
+
+        cert_date = parse_appsheet_date(cert.get("FECHA_CERTIFICADO"))
+        if cert_date and cert_date > cutoff:
+            continue
+
+        preliminary = cert.get("R_PRELIMINAR")
+        preliminary_num = None
+        try:
+            if preliminary not in (None, "", "—"):
+                preliminary_num = float(str(preliminary).replace(",", "."))
+        except Exception:
+            preliminary_num = None
+        if preliminary_num is None:
+            continue
+
+        age = cert.get("EDAD_PRELIMINAR")
+        age_num = None
+        try:
+            if age not in (None, "", "—"):
+                age_num = int(round(float(str(age).replace(",", "."))))
+        except Exception:
+            age_num = None
+
+        guide_id = str(cert.get("ID_GUIA") or "").strip()
+        guide = guide_map.get(guide_id, {})
+        visit = visit_map.get(guide_id, {})
+        folio = guide.get("FOLIO") or guide.get("N_GUIA") or "—"
+        grade = (
+            visit.get("GRADO_TIPO_LAB")
+            or guide.get("ITEM_TED")
+            or "—"
+        )
+        location = (
+            visit.get("DESCRIPCION_SECTOR")
+            or visit.get("ELEMENTO")
+            or "—"
+        )
+        obs = (
+            cert.get("OBSERVACION_RESULTADOS")
+            or cert.get("OBSERVACION")
+            or ""
+        )
+
+        result.append({
+            "certificate_id": cert.get("ID_CERTIFICADO"),
+            "certificate_date": cert_date,
+            "guide_id": guide_id,
+            "guide_folio": folio,
+            "grade": grade,
+            "location": location,
+            "value": preliminary_num,
+            "age_days": age_num,
+            "observation": obs,
+        })
+
+    result.sort(
+        key=lambda r: (
+            r.get("certificate_date") or date.min,
+            str(r.get("certificate_id") or ""),
+        )
+    )
+    return result
+
+
+def _render_preliminary_resistance_html(rows: list[dict[str, Any]]) -> str:
+    if not rows:
+        return ""
+
+    def esc(value: Any) -> str:
+        import html as _html
+        return _html.escape(str(value if value not in (None, "") else "—"))
+
+    body = []
+    for row in rows:
+        age = row.get("age_days")
+        age_text = f"{age} días" if age is not None else "Edad no informada"
+        value = row.get("value")
+        value_text = (
+            f"{float(value):.1f}".replace(".", ",") + " MPa"
+            if value is not None
+            else "—"
+        )
+        note = row.get("observation") or "Resultado informativo; no participa en la evaluación a 28 días."
+        body.append(
+            "<tr>"
+            f"<td>{esc(row.get('guide_folio'))}</td>"
+            f"<td>{esc(row.get('grade'))}</td>"
+            f"<td>{esc(row.get('location'))}</td>"
+            f"<td>{esc(age_text)}</td>"
+            f"<td><strong>{esc(value_text)}</strong></td>"
+            f"<td>{esc(note)}</td>"
+            "</tr>"
+        )
+
+    return (
+        '<div class="resistance-preliminary">'
+        '<h3 class="resistance-sub">Resultados preliminares</h3>'
+        '<p class="resistance-caption">'
+        'Los resultados preliminares pueden corresponder a distintas edades tempranas '
+        '(por ejemplo 3 o 7 días). Son informativos y no intervienen en el cumplimiento '
+        'a 28 días ni en la media móvil.'
+        '</p>'
+        '<table class="data-table resistance-table resistance-preliminary-table">'
+        '<thead><tr>'
+        '<th>Guía</th><th>Grado / tipo</th><th>Sector</th><th>Edad</th><th>Resultado</th><th>Observación</th>'
+        '</tr></thead><tbody>'
+        + ''.join(body)
+        + '</tbody></table></div>'
+    )
+
+
 def load_report_data(id_informe: str) -> dict[str, Any]:
     appsheet = AppSheetClient()
     drive = DriveClient()
@@ -406,6 +624,17 @@ def load_report_data(id_informe: str) -> dict[str, Any]:
             f"No fue posible construir el capítulo de fierro: {exc}"
         )
 
+    certificates, replicated_28_results = _normalize_resistance_certificates(
+        certificates
+    )
+
+    preliminary_resistance = _build_preliminary_resistance_summary(
+        certificates=certificates,
+        guide_rows=guide_rows,
+        visit_rows=visits,
+        cutoff=cutoff,
+    )
+
     resistance = build_resistance_report(
         rows=resistances,
         certificates=certificates,
@@ -441,6 +670,8 @@ def load_report_data(id_informe: str) -> dict[str, Any]:
         "invoices": invoices,
         "fierro": fierro,
         "resistance": resistance,
+        "preliminary_resistance": preliminary_resistance,
+        "replicated_28_results": replicated_28_results,
         "svg": svg_data_uri,
         "svg_snapshot": svg_snapshot,
         "photos": photos,
@@ -462,6 +693,8 @@ def build_context(bundle: dict[str, Any]) -> dict[str, Any]:
         "invoices": bundle["invoices"],
         "fierro": bundle.get("fierro") or {"available": False},
         "resistance": bundle["resistance"],
+        "preliminary_resistance": bundle.get("preliminary_resistance") or [],
+        "replicated_28_results": bundle.get("replicated_28_results") or [],
         "logo_path": (
             logo_file.resolve().as_uri()
             if logo_file.exists()
@@ -505,6 +738,30 @@ def render_pdf_bytes(
     html = html.replace(
         "05 · Control de resistencia del hormigón",
         "06 · Control de resistencia del hormigón",
+        1,
+    )
+
+    # V1.8.9: el resultado temprano deja de interpretarse como ensayo fijo a 7 días.
+    # Se inserta como antecedente informativo y el motor histórico de resistencia
+    # continúa evaluando únicamente R_28_DIAS_1 y R_28_DIAS_2.
+    preliminary_html = _render_preliminary_resistance_html(
+        bundle.get("preliminary_resistance") or []
+    )
+    replicated_html = _render_replicated_28_html(
+        bundle.get("replicated_28_results") or []
+    )
+    resistance_extra = preliminary_html + replicated_html
+    if resistance_extra:
+        resistance_title = "06 · Control de resistencia del hormigón</h2>"
+        html = html.replace(
+            resistance_title,
+            resistance_title + resistance_extra,
+            1,
+        )
+
+    html = html.replace(
+        "La proyección basada en el ensayo de 7 días es informativa y NO participa de los dos análisis de cumplimiento.",
+        "El resultado preliminar es informativo y NO participa de los análisis de cumplimiento ni de la media móvil.",
         1,
     )
 

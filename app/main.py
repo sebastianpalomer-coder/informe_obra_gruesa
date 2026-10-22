@@ -17,6 +17,10 @@ from .report_service import (
 )
 from .fierro_order_service import process_fierro_order
 from .sample_ticket_service import process_sample_ticket
+from .concrete_certificate_service import (
+    parse_concrete_certificate_payload,
+    process_concrete_certificate,
+)
 from .fierro_invoice_service import process_fierro_invoice
 from .fierro_guide_service import (
     process_fierro_guide,
@@ -28,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Informes Obra Gruesa",
-    version="1.8.8",
+    version="1.9.0",
 )
 
 
@@ -75,6 +79,26 @@ class SampleTicketRequest(BaseModel):
         json_schema_extra={
             "example": {
                 "id_visita": "REEMPLAZAR_POR_ID_REAL"
+            }
+        }
+    )
+
+
+class ConcreteCertificateRequest(BaseModel):
+    drive_file_id: str = ""
+    nombre_archivo: str = ""
+    modified_time: str = ""
+    content_base64: str = Field(min_length=1)
+    parse_only: bool = False
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "drive_file_id": "ID_ARCHIVO_DRIVE",
+                "nombre_archivo": "199.058-0_firmado.pdf",
+                "modified_time": "2026-10-13T14:05:00Z",
+                "content_base64": "JVBERi0xLjQ...",
+                "parse_only": False,
             }
         }
     )
@@ -146,7 +170,7 @@ def ping():
     return {
         "ok": True,
         "service": "informes-obra-gruesa",
-        "version": "1.8.8",
+        "version": "1.9.0",
     }
 
 
@@ -286,6 +310,44 @@ def procesar_boleta_muestreo(
         logger.exception(
             "procesar_boleta_muestreo endpoint_error id=%s",
             payload.id_visita,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=str(exc),
+        ) from exc
+
+
+
+# ============================================================
+# CERTIFICADOS DE RESISTENCIA DEL HORMIGÓN
+# ============================================================
+
+@app.post("/certificado-hormigon")
+def certificado_hormigon(
+    payload: ConcreteCertificateRequest,
+    x_report_token: str | None = Header(
+        default=None,
+        alias="X-Report-Token",
+    ),
+):
+    _validate_token(x_report_token)
+
+    try:
+        if payload.parse_only:
+            return parse_concrete_certificate_payload(
+                content_base64=payload.content_base64,
+                nombre_archivo=payload.nombre_archivo,
+            )
+        return process_concrete_certificate(
+            content_base64=payload.content_base64,
+            nombre_archivo=payload.nombre_archivo,
+            drive_file_id=payload.drive_file_id,
+            modified_time=payload.modified_time,
+        )
+    except Exception as exc:
+        logger.exception(
+            "certificado_hormigon endpoint_error file=%s",
+            payload.drive_file_id,
         )
         raise HTTPException(
             status_code=500,

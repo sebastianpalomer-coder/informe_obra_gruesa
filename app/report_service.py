@@ -371,12 +371,13 @@ def load_report_data(id_informe: str) -> dict[str, Any]:
         )
 
     # ------------------------------------------------------------
-    # V1.8.7 · Suministro y facturación de fierro
+    # V1.8.8 · Suministro y facturación de fierro consolidado
     # ------------------------------------------------------------
     # El capítulo de fierro es informativo y no debe impedir la emisión del
     # informe si una tabla está temporalmente inaccesible. Además, el resumen
     # respeta FECHA_CORTE para evitar contaminar informes históricos con
-    # pedidos, guías o facturas posteriores.
+    # pedidos, guías o facturas posteriores. Desde V1.8.8 consolida todos los
+    # proyectos de fierro, independientemente de la obra que origina el informe.
     fierro_warnings: list[str] = []
     fierro: dict[str, Any] = {
         "available": False,
@@ -498,7 +499,7 @@ def render_pdf_bytes(
     template = env.get_template("informe_semanal.html")
     html = template.render(**build_context(bundle))
 
-    # V1.8.7 agrega un capítulo antes del control de resistencia. El template
+    # V1.8.8 mantiene el capítulo consolidado antes del control de resistencia. El template
     # resistance_chapter.html existente conserva el rótulo histórico "05";
     # renumerarlo aquí evita exigir otro archivo de despliegue sólo por el título.
     html = html.replace(

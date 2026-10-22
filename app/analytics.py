@@ -377,63 +377,6 @@ def _normalize_fierro_text(value: Any) -> str:
     return " ".join(text.split())
 
 
-def _fierro_project(
-    data: dict[str, Any],
-    summary_rows: list[dict[str, Any]],
-) -> str:
-    """
-    Resuelve el nombre usado por las tablas de fierro.
-
-    Ejemplo actual:
-    OBRA[NOMBRE_OBRA] = "Hotel Bellet"
-    tablas de fierro[PROYECTO] = "Bellet"
-    """
-    explicit = pick(
-        data,
-        "FIERRO_PROYECTO",
-        "PROYECTO_FIERRO",
-        default=None,
-    )
-    candidates = [
-        explicit,
-        data.get("NOMBRE_OBRA"),
-        data.get("DIRECCION_OBRA"),
-    ]
-    normalized_candidates = [
-        _normalize_fierro_text(value)
-        for value in candidates
-        if str(value or "").strip()
-    ]
-
-    for row in summary_rows:
-        project = str(row.get("PROYECTO") or "").strip()
-        project_norm = _normalize_fierro_text(project)
-        if not project_norm:
-            continue
-        for candidate in normalized_candidates:
-            if project_norm == candidate or project_norm in candidate or candidate in project_norm:
-                return project
-
-    if explicit not in (None, ""):
-        return str(explicit).strip()
-
-    name = str(data.get("NOMBRE_OBRA") or "").strip()
-    name_norm = _normalize_fierro_text(name)
-    if "BELLET" in name_norm:
-        return "Bellet"
-    if "PATIO DOBLADO" in name_norm or "PATIO" in name_norm:
-        return "Patio Doblado"
-    return name
-
-
-def _same_fierro_project(value: Any, target: str) -> bool:
-    left = _normalize_fierro_text(value)
-    right = _normalize_fierro_text(target)
-    if not left or not right:
-        return False
-    return left == right or left in right or right in left
-
-
 def _fierro_row_date(row: dict[str, Any], *keys: str) -> date | None:
     return parse_appsheet_date(pick(row, *keys, default=None))
 
@@ -492,27 +435,56 @@ def build_fierro_summary(
 
     Importante: "recibido" describe material ingresado a obra respaldado por
     guías. No representa fierro instalado ni avance físico de estructura.
-    Todos los acumulados respetan FECHA_CORTE para que un informe histórico no
-    incorpore documentos posteriores.
+    El resumen es consolidado para todos los proyectos de fierro registrados
+    (actualmente Bellet + Patio Doblado). Todos los acumulados respetan
+    FECHA_CORTE para que un informe histórico no incorpore documentos posteriores.
     """
-    project = _fierro_project(data, summary_rows)
-
-    budget_row = next(
-        (
-            row for row in summary_rows
-            if _same_fierro_project(row.get("PROYECTO"), project)
-        ),
-        None,
+    # V1.8.8: el capítulo de fierro es CONSOLIDADO. No se filtra por la
+    # obra que origina el informe semanal. Se suman todos los proyectos
+    # registrados en las tablas de fierro (actualmente Bellet + Patio Doblado),
+    # manteniendo FECHA_CORTE como único filtro temporal.
+    projects = sorted(
+        {
+            str(row.get("PROYECTO") or "").strip()
+            for rows in (summary_rows, order_rows, guide_rows, invoice_rows)
+            for row in rows
+            if str(row.get("PROYECTO") or "").strip()
+        },
+        key=_normalize_fierro_text,
     )
-    budget_kg = to_float_or_none((budget_row or {}).get("KG_PRESUPUESTO"))
-    budget_price_kg = to_float_or_none(
-        (budget_row or {}).get("PRECIO_PRESUPUESTO_KG")
+    project_label = " + ".join(projects) if projects else "Todos los proyectos"
+
+    budget_rows = [
+        row for row in summary_rows
+        if str(row.get("PROYECTO") or "").strip()
+    ]
+    budget_kg = sum(
+        to_float_or_none(row.get("KG_PRESUPUESTO")) or 0.0
+        for row in budget_rows
+    )
+    if not budget_rows:
+        budget_kg = None
+
+    # Precio base consolidado ponderado por los kg presupuestados de cada
+    # proyecto. Si todos usan el mismo valor, naturalmente conserva ese precio.
+    budget_price_weight = 0.0
+    budget_price_base = 0.0
+    for row in budget_rows:
+        kg = to_float_or_none(row.get("KG_PRESUPUESTO"))
+        price = to_float_or_none(row.get("PRECIO_PRESUPUESTO_KG"))
+        if kg is None or kg <= 0 or price is None:
+            continue
+        budget_price_weight += kg * price
+        budget_price_base += kg
+    budget_price_kg = (
+        budget_price_weight / budget_price_base
+        if budget_price_base > 0
+        else None
     )
 
     selected_orders = [
         row for row in order_rows
-        if _same_fierro_project(row.get("PROYECTO"), project)
-        and _fierro_before_cutoff(row, cutoff, "FECHA_PEDIDO")
+        if _fierro_before_cutoff(row, cutoff, "FECHA_PEDIDO")
     ]
     order_ids = {
         str(
@@ -539,8 +511,7 @@ def build_fierro_summary(
 
     selected_guides = [
         row for row in guide_rows
-        if _same_fierro_project(row.get("PROYECTO"), project)
-        and _fierro_before_cutoff(row, cutoff, "FECHA_GUIA")
+        if _fierro_before_cutoff(row, cutoff, "FECHA_GUIA")
     ]
     guide_ids = {
         str(row.get("ID_GUIA_FIERRO") or "").strip()
@@ -572,8 +543,7 @@ def build_fierro_summary(
 
     selected_invoices = [
         row for row in invoice_rows
-        if _same_fierro_project(row.get("PROYECTO"), project)
-        and _fierro_before_cutoff(row, cutoff, "FECHA_EMISION")
+        if _fierro_before_cutoff(row, cutoff, "FECHA_EMISION")
     ]
     invoice_ids = {
         str(row.get("ID_FACTURA_FIERRO") or "").strip()
@@ -795,7 +765,7 @@ def build_fierro_summary(
         alerts.append(f"{invoice_alert_count} factura(s) no están validadas.")
 
     available = bool(
-        budget_row
+        budget_rows
         or selected_orders
         or selected_guides
         or selected_invoices
@@ -803,7 +773,9 @@ def build_fierro_summary(
 
     return {
         "available": available,
-        "project": project,
+        "project": project_label,
+        "projects": projects,
+        "project_count": len(projects),
         "cutoff": cutoff,
         "budget_kg": budget_kg,
         "budget_price_kg": budget_price_kg,

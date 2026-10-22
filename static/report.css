@@ -745,3 +745,40 @@ body {
   background: #F8F7FF;
   color: #536176;
 }
+
+
+/* V1.8.9 · Resultado preliminar de resistencia (edad variable). */
+.resistance-preliminary {
+  margin: 7px 0 10px;
+  break-inside: avoid;
+}
+.resistance-preliminary .resistance-sub {
+  margin-top: 7px;
+}
+.resistance-preliminary-table {
+  margin: 5px 0 8px;
+  font-size: 7.1pt;
+}
+.resistance-preliminary-table th:nth-child(1) { width: 9%; }
+.resistance-preliminary-table th:nth-child(2) { width: 19%; }
+.resistance-preliminary-table th:nth-child(3) { width: 17%; }
+.resistance-preliminary-table th:nth-child(4) { width: 10%; }
+.resistance-preliminary-table th:nth-child(5) { width: 12%; }
+.resistance-preliminary-table th:nth-child(6) { width: 33%; }
+.resistance-preliminary-table td { vertical-align: top; }
+
+
+.resistance-replicated-note {
+  margin: 6px 0 9px;
+  padding: 7px 9px;
+  border-left: 4px solid var(--orange);
+  background: var(--orange-soft);
+  color: #6B4A21;
+  font-size: 7.3pt;
+  line-height: 1.3;
+  break-inside: avoid;
+}
+.resistance-replicated-note strong {
+  display: block;
+  margin-bottom: 3px;
+}

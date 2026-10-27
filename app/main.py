@@ -26,13 +26,17 @@ from .fierro_guide_service import (
     process_fierro_guide,
     reconcile_existing_fierro_guide,
 )
+from .subcontract_import_service import (
+    process_subcontract_import,
+    validate_subcontract_import,
+)
 
 logger = logging.getLogger(__name__)
 
 
 app = FastAPI(
     title="Informes Obra Gruesa",
-    version="1.9.2",
+    version="1.10.0",
 )
 
 
@@ -170,8 +174,50 @@ def ping():
     return {
         "ok": True,
         "service": "informes-obra-gruesa",
-        "version": "1.9.2",
+        "version": "1.10.0",
     }
+
+
+# ============================================================
+# SUBCONTRATOS ICONSTRUYE
+# ============================================================
+
+@app.post("/subcontratos/validar")
+def subcontratos_validar(
+    x_report_token: str | None = Header(
+        default=None,
+        alias="X-Report-Token",
+    ),
+):
+    _validate_token(x_report_token)
+
+    try:
+        return validate_subcontract_import()
+    except Exception as exc:
+        logger.exception("subcontratos_validar endpoint_error")
+        raise HTTPException(
+            status_code=500,
+            detail=str(exc),
+        ) from exc
+
+
+@app.post("/subcontratos/actualizar")
+def subcontratos_actualizar(
+    x_report_token: str | None = Header(
+        default=None,
+        alias="X-Report-Token",
+    ),
+):
+    _validate_token(x_report_token)
+
+    try:
+        return process_subcontract_import()
+    except Exception as exc:
+        logger.exception("subcontratos_actualizar endpoint_error")
+        raise HTTPException(
+            status_code=500,
+            detail=str(exc),
+        ) from exc
 
 
 # ============================================================

@@ -24,7 +24,7 @@ except ImportError:  # permite iniciar el servicio; .xls requerirá instalar xlr
 
 logger = logging.getLogger(__name__)
 
-VERSION = "1.11.0-subcontratos-iconstruye"
+VERSION = "1.11.1-subcontratos-iconstruye"
 
 # -----------------------------------------------------------------------------
 # Configuración fija del proyecto Hotel Bellet, sobreescribible por variables.
@@ -659,6 +659,24 @@ def _parse_xls_tables(data: bytes) -> list[list[list[Any]]]:
     return tables
 
 
+def _looks_like_tabular_text(data: bytes) -> bool:
+    """Detecta exportaciones iConstruye que son texto tabulado aunque terminen en .xls."""
+    sample = data[:8192]
+    if not sample:
+        return False
+
+    # UTF-16 LE / BE con o sin BOM. En UTF-16 los tabs aparecen como 09 00 o 00 09.
+    utf16_tab = b"\t\x00" in sample or b"\x00\t" in sample
+    has_many_nuls = sample.count(b"\x00") >= max(4, len(sample) // 10)
+    if utf16_tab and (data.startswith((b"\xff\xfe", b"\xfe\xff")) or has_many_nuls):
+        return True
+
+    # También toleramos TSV UTF-8/ANSI si contiene varias columnas y saltos de línea.
+    if b"\t" in sample and (b"\n" in sample or b"\r" in sample):
+        return True
+    return False
+
+
 def _detect_container(data: bytes, file_name: str) -> str:
     head = data[:256].lstrip()
     if data.startswith(b"PK\x03\x04"):
@@ -667,8 +685,12 @@ def _detect_container(data: bytes, file_name: str) -> str:
         return "xls"
     if head.startswith(b"<") or b"<table" in head.lower() or b"<style" in head.lower():
         return "html"
-    if data.startswith((b"\xff\xfe", b"\xfe\xff")) and b"\t\x00" in data[:4096]:
+
+    # IMPORTANTE: iConstruye entrega el reporte de garantías como TSV UTF-16
+    # con extensión .xls. Debe detectarse por contenido ANTES de confiar en la extensión.
+    if _looks_like_tabular_text(data):
         return "tsv"
+
     lower = file_name.lower()
     if lower.endswith(".xlsx"):
         return "xlsx"
@@ -959,9 +981,18 @@ def _download_drive_file(file: DriveFile) -> bytes:
 # -----------------------------------------------------------------------------
 def _parse_drive_file(file: DriveFile) -> ParsedReport:
     data = _download_drive_file(file)
-    _, tables = _read_tables(data, file.name)
+    container, tables = _read_tables(data, file.name)
     table, headers, rows, metadata = _find_report(tables)
     transformed = _transform_report(table, headers, rows)
+    logger.info(
+        "subcontratos archivo_clasificado nombre=%s id=%s container=%s reporte=%s filas=%s bytes=%s",
+        file.name,
+        file.id,
+        container,
+        table,
+        len(transformed),
+        len(data),
+    )
     return ParsedReport(
         table=table,
         file=file,
@@ -981,6 +1012,12 @@ def _select_latest_reports() -> tuple[dict[str, ParsedReport], list[str]]:
     parsed_by_table: dict[str, list[ParsedReport]] = {table: [] for table in TABLES}
     parse_errors: list[str] = []
 
+    logger.info(
+        "subcontratos archivos_en_carpeta total=%s archivos=%s",
+        len(files),
+        [f"{f.name} ({f.id}, {f.size} bytes)" for f in files],
+    )
+
     for file in files:
         lower = file.name.lower()
         if not (lower.endswith(".xls") or lower.endswith(".xlsx")):
@@ -989,7 +1026,14 @@ def _select_latest_reports() -> tuple[dict[str, ParsedReport], list[str]]:
             report = _parse_drive_file(file)
             parsed_by_table[report.table].append(report)
         except Exception as exc:
-            parse_errors.append(f"{file.name}: {exc}")
+            error_text = f"{file.name}: {exc}"
+            parse_errors.append(error_text)
+            logger.warning(
+                "subcontratos archivo_ignorado nombre=%s id=%s error=%s",
+                file.name,
+                file.id,
+                exc,
+            )
 
     selected: dict[str, ParsedReport] = {}
     warnings: list[str] = []
@@ -997,8 +1041,10 @@ def _select_latest_reports() -> tuple[dict[str, ParsedReport], list[str]]:
         candidates = parsed_by_table[table]
         if not candidates:
             detail = "; ".join(parse_errors[:8])
+            visibles = ", ".join(file.name for file in files[:20])
             raise SubcontractImportError(
                 f"No se encontró un archivo válido para {table}."
+                + (f" Archivos visibles: {visibles}." if visibles else "")
                 + (f" Errores de lectura: {detail}" if detail else "")
             )
         candidates.sort(

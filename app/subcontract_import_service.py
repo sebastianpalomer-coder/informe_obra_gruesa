@@ -24,7 +24,7 @@ except ImportError:  # permite iniciar el servicio; .xls requerirá instalar xlr
 
 logger = logging.getLogger(__name__)
 
-VERSION = "1.11.1-subcontratos-iconstruye"
+VERSION = "1.11.3-subcontratos-iconstruye"
 
 # -----------------------------------------------------------------------------
 # Configuración fija del proyecto Hotel Bellet, sobreescribible por variables.
@@ -1128,16 +1128,20 @@ def _validate_reports(reports: dict[str, ParsedReport]) -> list[str]:
     if missing_ep_sc:
         errors.append("EP referencia SC inexistentes: " + ", ".join(missing_ep_sc[:30]))
 
-    missing_active_guarantee_sc = sorted({
+    # El reporte de garantías puede incluir SC que todavía no aparecen en REPORTE_SC,
+    # por ejemplo contratos en "Espera Aprobacion", además de contratos cancelados.
+    # Sólo exigimos integridad referencial contra el snapshot maestro cuando iConstruye
+    # declara explícitamente que el SC está "En Ejecucion".
+    missing_execution_guarantee_sc = sorted({
         _text(row["ID_SC"])
         for row in garantia_rows
-        if _text(row.get("ESTADO_SC")).upper() != "CANCELADO"
+        if _norm(row.get("ESTADO_SC")) == "ENEJECUCION"
         and _text(row["ID_SC"]) not in sc_by_id
     })
-    if missing_active_guarantee_sc:
+    if missing_execution_guarantee_sc:
         errors.append(
-            "GARANTIAS referencia SC activos inexistentes: "
-            + ", ".join(missing_active_guarantee_sc[:30])
+            "GARANTIAS con SC En Ejecucion inexistentes en REPORTE_SC: "
+            + ", ".join(missing_execution_guarantee_sc[:30])
         )
 
     missing_det_ep = sorted({
@@ -1146,6 +1150,14 @@ def _validate_reports(reports: dict[str, ParsedReport]) -> list[str]:
     if missing_det_ep:
         errors.append("DETALLE_EP referencia EP inexistentes: " + ", ".join(missing_det_ep[:30]))
 
+    # Integridad estricta también a nivel de detalle: ninguna línea de EP puede
+    # existir si su contrato maestro no está presente en REPORTE_SC.
+    missing_det_ep_sc = sorted({
+        _text(row["ID_SC"]) for row in det_ep_rows if _text(row["ID_SC"]) not in sc_by_id
+    })
+    if missing_det_ep_sc:
+        errors.append("DETALLE_EP referencia SC inexistentes: " + ", ".join(missing_det_ep_sc[:30]))
+
     missing_line = sorted({
         _text(row["ID_SC_DETALLE"])
         for row in det_ep_rows
@@ -1153,6 +1165,16 @@ def _validate_reports(reports: dict[str, ParsedReport]) -> list[str]:
     })
     if missing_line:
         errors.append("DETALLE_EP referencia líneas SC inexistentes: " + ", ".join(missing_line[:30]))
+
+    mismatched_line_sc: list[str] = []
+    for row in det_ep_rows:
+        line = det_sc_by_id.get(_text(row["ID_SC_DETALLE"]))
+        if line and _text(line.get("ID_SC")) != _text(row.get("ID_SC")):
+            mismatched_line_sc.append(
+                f'{row.get("ID_EP_DETALLE")}: detalleEP={row.get("ID_SC")}, lineaSC={line.get("ID_SC")}'
+            )
+    if mismatched_line_sc:
+        errors.append("DETALLE_EP con SC distinto a la línea de contrato: " + "; ".join(mismatched_line_sc[:20]))
 
     mismatched_ep_sc: list[str] = []
     for row in det_ep_rows:

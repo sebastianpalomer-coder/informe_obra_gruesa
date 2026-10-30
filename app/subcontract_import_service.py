@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import io
 import logging
 import os
@@ -23,7 +24,7 @@ except ImportError:  # permite iniciar el servicio; .xls requerirá instalar xlr
 
 logger = logging.getLogger(__name__)
 
-VERSION = "1.10.0-subcontratos-iconstruye"
+VERSION = "1.11.0-subcontratos-iconstruye"
 
 # -----------------------------------------------------------------------------
 # Configuración fija del proyecto Hotel Bellet, sobreescribible por variables.
@@ -54,8 +55,11 @@ TABLE_EP = os.getenv("SUBCONTRATOS_TABLE_EP", "REPORTE_EP").strip()
 TABLE_DETALLE_EP = os.getenv(
     "SUBCONTRATOS_TABLE_DETALLE_EP", "REPORTE_DETALLE_EP"
 ).strip()
+TABLE_GARANTIAS_SC = os.getenv(
+    "SUBCONTRATOS_TABLE_GARANTIAS_SC", "REPORTE_GARANTIAS_SC"
+).strip()
 
-TABLES = (TABLE_SC, TABLE_DETALLE_SC, TABLE_EP, TABLE_DETALLE_EP)
+TABLES = (TABLE_SC, TABLE_DETALLE_SC, TABLE_EP, TABLE_DETALLE_EP, TABLE_GARANTIAS_SC)
 
 GOOGLE_OAUTH_CLIENT_ID = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "").strip()
 GOOGLE_OAUTH_CLIENT_SECRET = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "").strip()
@@ -185,6 +189,21 @@ EXPECTED_HEADERS: dict[str, list[str]] = {
         "MONTO_EP",
         "ESTADO_DOCUMENTO",
     ],
+    TABLE_GARANTIAS_SC: [
+        "ID_GARANTIA_SC",
+        "ID_SC",
+        "NOMBRE_SC",
+        "ESTADO_SC",
+        "CENTRO_GESTION",
+        "RUT_SUBCONTRATISTA",
+        "NOMBRE_SUBCONTRATISTA",
+        "TIPO_GARANTIA",
+        "MONEDA_GARANTIA",
+        "MONTO_GARANTIA",
+        "TIPO_DOCUMENTO_GARANTIA",
+        "FECHA_VENCIMIENTO",
+        "VENCIDA",
+    ],
 }
 
 
@@ -214,6 +233,7 @@ NUMBER_COLUMNS: dict[str, set[str]] = {
         "TASA_CAMBIO_SC", "CANTIDAD_ORIGINAL", "CANTIDAD_CORREGIDA",
         "PRECIO_UNITARIO", "PRECIO_TOTAL", "CANTIDAD_EP", "MONTO_EP",
     },
+    TABLE_GARANTIAS_SC: {"MONTO_GARANTIA"},
 }
 
 DATE_COLUMNS: dict[str, set[str]] = {
@@ -221,6 +241,7 @@ DATE_COLUMNS: dict[str, set[str]] = {
     TABLE_DETALLE_SC: {"FECHA_CREACION"},
     TABLE_EP: {"FECHA_EP"},
     TABLE_DETALLE_EP: set(),
+    TABLE_GARANTIAS_SC: {"FECHA_VENCIMIENTO"},
 }
 
 
@@ -339,11 +360,27 @@ SOURCE_MAP_DETALLE_EP = {
     "ESTADO_DOCUMENTO": ["Estado Documento"],
 }
 
+SOURCE_MAP_GARANTIAS_SC = {
+    "ID_SC": ["Numero Subcontrato", "Número Subcontrato", "Nº Subcontrato", "N° Subcontrato"],
+    "NOMBRE_SC": ["Nombre Subcontrato"],
+    "ESTADO_SC": ["Estado del Subcontrato", "Estado Subcontrato"],
+    "CENTRO_GESTION": ["Centro Gestion", "Centro Gestión", "Centro de Gestion", "Centro de Gestión"],
+    "RUT_SUBCONTRATISTA": ["Rut Subcontratista", "RUT Subcontratista"],
+    "NOMBRE_SUBCONTRATISTA": ["Nombre Subcontratista"],
+    "TIPO_GARANTIA": ["Tipo Garantia", "Tipo Garantía"],
+    "MONEDA_GARANTIA": ["Monto Garantia", "Monto Garantía"],
+    "MONTO_GARANTIA": ["Monto Garantia", "Monto Garantía"],
+    "TIPO_DOCUMENTO_GARANTIA": ["Tipo Documento Garantia", "Tipo Documento Garantía"],
+    "FECHA_VENCIMIENTO": ["Fecha Vencimiento"],
+    "VENCIDA": ["Vencida"],
+}
+
 SOURCE_MAPS = {
     TABLE_SC: SOURCE_MAP_SC,
     TABLE_DETALLE_SC: SOURCE_MAP_DETALLE_SC,
     TABLE_EP: SOURCE_MAP_EP,
     TABLE_DETALLE_EP: SOURCE_MAP_DETALLE_EP,
+    TABLE_GARANTIAS_SC: SOURCE_MAP_GARANTIAS_SC,
 }
 
 
@@ -448,6 +485,29 @@ def _parse_number(value: Any) -> float | int | str:
         return number
     except ValueError:
         return _text(value)
+
+
+def _parse_currency(value: Any) -> str:
+    text = _text(value).upper()
+    if text.startswith("US$"):
+        return "US$"
+    if text.startswith("UF"):
+        return "UF"
+    if text.startswith("$"):
+        return "$"
+    return ""
+
+
+def _key_number(value: Any) -> str:
+    if value in (None, ""):
+        return ""
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        if value.is_integer():
+            return str(int(value))
+        return format(value, ".12g")
+    return _text(value)
 
 
 def _parse_date(value: Any) -> str:
@@ -561,6 +621,20 @@ def _parse_xlsx_tables(data: bytes) -> list[list[list[Any]]]:
     return tables
 
 
+def _parse_tsv_tables(data: bytes) -> list[list[list[Any]]]:
+    text = None
+    for encoding in ("utf-16", "utf-16-le", "utf-8-sig", "cp1252"):
+        try:
+            text = data.decode(encoding)
+            break
+        except UnicodeDecodeError:
+            continue
+    if text is None:
+        raise SubcontractImportError("No se pudo decodificar el reporte tabulado.")
+    rows = [list(row) for row in csv.reader(io.StringIO(text), delimiter="\t")]
+    return [rows]
+
+
 def _parse_xls_tables(data: bytes) -> list[list[list[Any]]]:
     if xlrd is None:
         raise SubcontractImportError("Falta dependencia xlrd para leer .xls binario.")
@@ -593,6 +667,8 @@ def _detect_container(data: bytes, file_name: str) -> str:
         return "xls"
     if head.startswith(b"<") or b"<table" in head.lower() or b"<style" in head.lower():
         return "html"
+    if data.startswith((b"\xff\xfe", b"\xfe\xff")) and b"\t\x00" in data[:4096]:
+        return "tsv"
     lower = file_name.lower()
     if lower.endswith(".xlsx"):
         return "xlsx"
@@ -607,6 +683,8 @@ def _read_tables(data: bytes, file_name: str) -> tuple[str, list[list[list[Any]]
         return container, _parse_xlsx_tables(data)
     if container == "xls":
         return container, _parse_xls_tables(data)
+    if container == "tsv":
+        return container, _parse_tsv_tables(data)
     return container, _parse_html_tables(data)
 
 
@@ -621,6 +699,7 @@ def _classify_header(row: list[Any]) -> tuple[str | None, int]:
         (TABLE_DETALLE_SC, {_norm("Nº Subcontrato"), _norm("Código del Servicio o Actividad"), _norm("Cantidad Original"), _norm("N° Linea")} ),
         (TABLE_EP, {_norm("Nº Estado de Pago"), _norm("Número Subcontrato"), _norm("Monto Bruto Estado de Pago")} ),
         (TABLE_DETALLE_EP, {_norm("Número EP"), _norm("Número SC"), _norm("Cantidad EP"), _norm("Monto EP")} ),
+        (TABLE_GARANTIAS_SC, {_norm("Numero Subcontrato"), _norm("Tipo Garantia"), _norm("Monto Garantia"), _norm("Fecha Vencimiento")} ),
     ]
 
     best_table: str | None = None
@@ -654,6 +733,16 @@ def _extract_metadata(rows_before_header: list[list[Any]]) -> dict[str, str]:
                 if re.fullmatch(r"\d{1,2}[-/]\d{1,2}[-/]\d{2,4}", candidate):
                     result["FECHA_HASTA_REPORTE"] = _parse_date(candidate)
                     break
+        elif key == _norm("Fecha Vencimiento Garantia"):
+            dates = [
+                _parse_date(candidate)
+                for candidate in flat[i + 1 : i + 6]
+                if re.fullmatch(r"\d{1,2}[-/]\d{1,2}[-/]\d{2,4}", candidate)
+            ]
+            if dates:
+                result["FECHA_DESDE_REPORTE"] = dates[0]
+            if len(dates) > 1:
+                result["FECHA_HASTA_REPORTE"] = dates[1]
     return result
 
 
@@ -743,6 +832,21 @@ def _transform_report(
             dst["ID_SC_DETALLE"] = f'{dst["ID_SC"]}|{dst["N_LINEA_SC"]}'
             dst["ID_EP_DETALLE"] = f'{dst["ID_EP"]}|{dst["N_LINEA_SC"]}'
 
+        elif table == TABLE_GARANTIAS_SC:
+            dst["ID_SC"] = _norm_id(dst.get("ID_SC"))
+            if not _is_sc(dst["ID_SC"]):
+                continue
+            raw_amount = dst.get("MONTO_GARANTIA")
+            dst["MONEDA_GARANTIA"] = _parse_currency(raw_amount)
+            dst["MONTO_GARANTIA"] = _parse_number(raw_amount)
+            dst["FECHA_VENCIMIENTO"] = _parse_date(dst.get("FECHA_VENCIMIENTO"))
+            dst["ID_GARANTIA_SC"] = "|".join([
+                dst["ID_SC"],
+                _text(dst.get("TIPO_GARANTIA")),
+                dst["FECHA_VENCIMIENTO"],
+                _key_number(dst["MONTO_GARANTIA"]),
+            ])
+
         for column in NUMBER_COLUMNS[table]:
             if column in dst:
                 dst[column] = _parse_number(dst[column])
@@ -751,10 +855,15 @@ def _transform_report(
                 dst[column] = _parse_date(dst[column])
 
         # Claves y códigos deben mantenerse como texto.
-        for column in ("ID_SC", "ID_SC_DETALLE", "ID_EP", "ID_EP_DETALLE", "N_LINEA_SC",
+        for column in ("ID_SC", "ID_SC_DETALLE", "ID_EP", "ID_EP_DETALLE", "ID_GARANTIA_SC", "N_LINEA_SC",
                        "RUT_SUBCONTRATISTA", "CODIGO_SERVICIO", "CODIGO_CUENTA_COSTO", "N_FACTURA"):
             if column in dst:
                 dst[column] = _norm_id(dst[column])
+
+        # Limpiar espacios de campos de texto sin modificar números ni fechas.
+        for column in EXPECTED_HEADERS[table]:
+            if column in dst and column not in NUMBER_COLUMNS[table] and column not in DATE_COLUMNS[table]:
+                dst[column] = _text(dst[column])
 
         # Garantizar que sólo salgan columnas físicas esperadas y en forma serializable.
         final_row = {column: dst.get(column, "") for column in EXPECTED_HEADERS[table]}
@@ -912,7 +1021,7 @@ def _select_latest_reports() -> tuple[dict[str, ParsedReport], list[str]]:
             span_minutes = (max(times) - min(times)).total_seconds() / 60.0
             if span_minutes > MAX_BATCH_SPAN_MINUTES:
                 raise SubcontractImportError(
-                    f"Los 4 reportes seleccionados no parecen pertenecer al mismo lote: "
+                    f"Los {len(TABLES)} reportes seleccionados no parecen pertenecer al mismo lote: "
                     f"sus modifiedTime abarcan {span_minutes:.1f} minutos "
                     f"(máximo {MAX_BATCH_SPAN_MINUTES})."
                 )
@@ -944,12 +1053,14 @@ def _validate_reports(reports: dict[str, ParsedReport]) -> list[str]:
     det_sc_rows = reports[TABLE_DETALLE_SC].rows
     ep_rows = reports[TABLE_EP].rows
     det_ep_rows = reports[TABLE_DETALLE_EP].rows
+    garantia_rows = reports[TABLE_GARANTIAS_SC].rows
 
     for table, rows, key in (
         (TABLE_SC, sc_rows, "ID_SC"),
         (TABLE_DETALLE_SC, det_sc_rows, "ID_SC_DETALLE"),
         (TABLE_EP, ep_rows, "ID_EP"),
         (TABLE_DETALLE_EP, det_ep_rows, "ID_EP_DETALLE"),
+        (TABLE_GARANTIAS_SC, garantia_rows, "ID_GARANTIA_SC"),
     ):
         dup = _duplicates(rows, key)
         if dup:
@@ -970,6 +1081,18 @@ def _validate_reports(reports: dict[str, ParsedReport]) -> list[str]:
     })
     if missing_ep_sc:
         errors.append("EP referencia SC inexistentes: " + ", ".join(missing_ep_sc[:30]))
+
+    missing_active_guarantee_sc = sorted({
+        _text(row["ID_SC"])
+        for row in garantia_rows
+        if _text(row.get("ESTADO_SC")).upper() != "CANCELADO"
+        and _text(row["ID_SC"]) not in sc_by_id
+    })
+    if missing_active_guarantee_sc:
+        errors.append(
+            "GARANTIAS referencia SC activos inexistentes: "
+            + ", ".join(missing_active_guarantee_sc[:30])
+        )
 
     missing_det_ep = sorted({
         _text(row["ID_EP"]) for row in det_ep_rows if _text(row["ID_EP"]) not in ep_by_id
@@ -1115,7 +1238,7 @@ def _write_matrices(sheets, matrices: dict[str, list[list[Any]]]) -> None:
         .batchUpdate(
             spreadsheetId=SPREADSHEET_ID,
             body={
-                "valueInputOption": "USER_ENTERED",
+                "valueInputOption": "RAW",
                 "data": data,
             },
         )
@@ -1142,7 +1265,7 @@ def _publish(reports: dict[str, ParsedReport]) -> None:
             logger.exception("subcontratos rollback_failed")
             raise SubcontractImportError(
                 f"Falló la publicación ({publish_error}) y también falló el rollback. "
-                "Revisar inmediatamente las cuatro tablas."
+                "Revisar inmediatamente las cinco tablas."
             ) from publish_error
         raise SubcontractImportError(
             f"Falló la publicación y se restauró el snapshot anterior: {publish_error}"
@@ -1174,6 +1297,7 @@ def _summary(reports: dict[str, ParsedReport], warnings: list[str], published: b
             "detalle_sc": len(reports[TABLE_DETALLE_SC].rows),
             "ep": len(reports[TABLE_EP].rows),
             "detalle_ep": len(reports[TABLE_DETALLE_EP].rows),
+            "garantias_sc": len(reports[TABLE_GARANTIAS_SC].rows),
         },
         "files": files,
         "warnings": warnings,

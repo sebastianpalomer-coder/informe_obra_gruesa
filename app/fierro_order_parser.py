@@ -18,7 +18,7 @@ class FierroOrderLine:
     diametro_mm: float
     largo_m: float
     kg_mt: float
-    barras_solicitadas: int
+    barras_solicitadas: float
     kg_solicitados: float
 
 
@@ -269,7 +269,7 @@ def _parse_detail(sheet: _SheetMatrix) -> tuple[FierroOrderLine, ...]:
 
         diametro = _as_number(sheet.value(row, columns["diametro"]))
         largo = _as_number(sheet.value(row, columns["largo"]))
-        barras = _as_int(sheet.value(row, columns["barras"]))
+        barras = _as_number(sheet.value(row, columns["barras"]))
 
         if diametro is None or largo is None or barras is None:
             if not row_text:
